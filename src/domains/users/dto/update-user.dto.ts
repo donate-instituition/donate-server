@@ -1,19 +1,31 @@
-import { UserRole } from '../models';
+import { UserRole, UserSettings, UserStats, UserStatus, UserType } from '../models';
 
 export class UpdateUserDto {
-  name?: string;
+  type?: UserType;
+
+  role?: UserRole;
+
+  fullName?: string;
 
   email?: string;
-
-  passwordHash?: string;
 
   phone?: string;
 
   cpf?: string;
 
-  role?: UserRole;
+  passwordHash?: string;
 
-  profileImageUrl?: string;
+  birthDate?: Date;
 
-  isActive?: boolean;
+  profilePhotoUrl?: string;
+
+  bio?: string;
+
+  status?: UserStatus;
+
+  isVerified?: boolean;
+
+  settings?: UserSettings;
+
+  stats?: UserStats;
 }
