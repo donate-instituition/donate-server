@@ -1,29 +1,44 @@
 import { Types } from 'mongoose';
 
-import { InstitutionVerificationStatus } from '../models';
+import { InstitutionStatus } from '../models';
+import type {
+  InstitutionAddress,
+  InstitutionStats,
+  InstitutionVerification,
+} from '../models';
 
 export class UpdateInstitutionDto {
-  userId?: Types.ObjectId;
+  legalName?: string;
 
-  razaoSocial?: string;
-
-  nomeFantasia?: string;
+  displayName?: string;
 
   cnpj?: string;
 
+  email?: string;
+
+  phone?: string;
+
   description?: string;
 
-  category?: string;
+  categoryIds?: Types.ObjectId[];
 
-  contactEmail?: string;
+  logoUrl?: string;
 
-  contactPhone?: string;
+  coverPhotoUrl?: string;
 
-  websiteUrl?: string;
+  website?: string;
+
+  status?: InstitutionStatus;
+
+  verification?: InstitutionVerification;
+
+  address?: InstitutionAddress;
+
+  acceptedDonationTypes?: string[];
 
   pixKey?: string;
 
-  verificationStatus?: InstitutionVerificationStatus;
+  taxReceiptEnabled?: boolean;
 
-  addressId?: Types.ObjectId;
+  stats?: InstitutionStats;
 }

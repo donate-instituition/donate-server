@@ -1,7 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 
-import { InstitutionVerificationStatus } from '../models';
+import { InstitutionStatus } from '../models';
+import type {
+  InstitutionAddress,
+  InstitutionStats,
+  InstitutionVerification,
+} from '../models';
 
 export type InstitutionDocument = HydratedDocument<Institution>;
 
@@ -12,46 +17,76 @@ export type InstitutionDocument = HydratedDocument<Institution>;
 export class Institution {
   _id!: Types.ObjectId;
 
-  @Prop({ required: true, type: Types.ObjectId, ref: 'User' })
-  userId!: Types.ObjectId;
+  @Prop({ required: true, trim: true })
+  legalName!: string;
 
   @Prop({ required: true, trim: true })
-  razaoSocial!: string;
-
-  @Prop({ required: true, trim: true })
-  nomeFantasia!: string;
+  displayName!: string;
 
   @Prop({ required: true, trim: true, unique: true })
   cnpj!: string;
 
+  @Prop({ required: true, trim: true, lowercase: true })
+  email!: string;
+
+  @Prop({ trim: true })
+  phone?: string;
+
   @Prop({ required: true, trim: true })
   description!: string;
 
-  @Prop({ trim: true })
-  category?: string;
-
-  @Prop({ required: true, trim: true, lowercase: true })
-  contactEmail!: string;
-
-  @Prop({ trim: true })
-  contactPhone?: string;
+  @Prop({
+    type: [{ type: Types.ObjectId }],
+    default: [],
+  })
+  categoryIds!: Types.ObjectId[];
 
   @Prop({ trim: true })
-  websiteUrl?: string;
+  logoUrl?: string;
+
+  @Prop({ trim: true })
+  coverPhotoUrl?: string;
+
+  @Prop({ trim: true })
+  website?: string;
+
+  @Prop({
+    required: true,
+    enum: InstitutionStatus,
+    type: String,
+    default: InstitutionStatus.PENDING_APPROVAL,
+  })
+  status!: InstitutionStatus;
+
+  @Prop({
+    type: MongooseSchema.Types.Mixed,
+    default: {},
+  })
+  verification?: InstitutionVerification;
+
+  @Prop({
+    type: MongooseSchema.Types.Mixed,
+    default: {},
+  })
+  address?: InstitutionAddress;
+
+  @Prop({
+    type: [String],
+    default: [],
+  })
+  acceptedDonationTypes!: string[];
 
   @Prop({ trim: true })
   pixKey?: string;
 
-  @Prop({
-    required: true,
-    enum: InstitutionVerificationStatus,
-    type: String,
-    default: InstitutionVerificationStatus.PENDING,
-  })
-  verificationStatus!: InstitutionVerificationStatus;
+  @Prop({ required: true, default: false })
+  taxReceiptEnabled!: boolean;
 
-  @Prop({ type: Types.ObjectId, ref: 'Address' })
-  addressId?: Types.ObjectId;
+  @Prop({
+    type: MongooseSchema.Types.Mixed,
+    default: {},
+  })
+  stats?: InstitutionStats;
 
   createdAt!: Date;
 

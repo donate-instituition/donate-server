@@ -1,1 +1,1 @@
-export * from './institution-verification-status.enum';
+export * from './institution-status.enum';

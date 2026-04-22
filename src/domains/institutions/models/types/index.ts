@@ -1,1 +1,1 @@
-export {};
+export * from './institution-stats.type';
