@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class AppService {
-  getHello(): string {
-    return 'Hello World!';
+  getApiInfo() {
+    return {
+      name: 'donate-server',
+      status: 'ok',
+      domains: ['users', 'institutions'],
+    };
   }
 }
