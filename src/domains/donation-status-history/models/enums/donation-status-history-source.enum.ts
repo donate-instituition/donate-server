@@ -1,0 +1,6 @@
+export enum DonationStatusHistorySource {
+  SYSTEM = 'SYSTEM',
+  DONOR = 'DONOR',
+  INSTITUTION_STAFF = 'INSTITUTION_STAFF',
+  PAYMENT_WEBHOOK = 'PAYMENT_WEBHOOK',
+}

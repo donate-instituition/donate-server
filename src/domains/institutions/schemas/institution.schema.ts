@@ -1,7 +1,10 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Prop, raw, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 
-import { InstitutionStatus } from '../models';
+import {
+  InstitutionDonationType,
+  InstitutionStatus,
+} from '../models';
 import type {
   InstitutionAddress,
   InstitutionStats,
@@ -11,6 +14,7 @@ import type {
 export type InstitutionDocument = HydratedDocument<Institution>;
 
 @Schema({
+  collection: 'institutions',
   timestamps: true,
   versionKey: false,
 })
@@ -32,8 +36,8 @@ export class Institution {
   @Prop({ trim: true })
   phone?: string;
 
-  @Prop({ required: true, trim: true })
-  description!: string;
+  @Prop({ trim: true })
+  description?: string;
 
   @Prop({
     type: [{ type: Types.ObjectId }],
@@ -59,22 +63,73 @@ export class Institution {
   status!: InstitutionStatus;
 
   @Prop({
-    type: MongooseSchema.Types.Mixed,
-    default: {},
+    type: raw({
+      isVerified: {
+        type: Boolean,
+        default: false,
+      },
+      verifiedAt: {
+        type: Date,
+      },
+      verifiedByUserId: {
+        type: Types.ObjectId,
+        ref: 'User',
+      },
+    }),
+    default: {
+      isVerified: false,
+    },
   })
   verification?: InstitutionVerification;
 
   @Prop({
-    type: MongooseSchema.Types.Mixed,
+    type: raw({
+      street: {
+        type: String,
+        trim: true,
+      },
+      number: {
+        type: String,
+        trim: true,
+      },
+      district: {
+        type: String,
+        trim: true,
+      },
+      city: {
+        type: String,
+        trim: true,
+      },
+      state: {
+        type: String,
+        trim: true,
+      },
+      zipCode: {
+        type: String,
+        trim: true,
+      },
+      country: {
+        type: String,
+        trim: true,
+      },
+      location: {
+        type: MongooseSchema.Types.Mixed,
+        default: {
+          type: 'Point',
+          coordinates: [],
+        },
+      },
+    }),
     default: {},
   })
   address?: InstitutionAddress;
 
   @Prop({
     type: [String],
+    enum: InstitutionDonationType,
     default: [],
   })
-  acceptedDonationTypes!: string[];
+  acceptedDonationTypes!: InstitutionDonationType[];
 
   @Prop({ trim: true })
   pixKey?: string;
@@ -83,8 +138,30 @@ export class Institution {
   taxReceiptEnabled!: boolean;
 
   @Prop({
-    type: MongooseSchema.Types.Mixed,
-    default: {},
+    type: raw({
+      followersCount: {
+        type: Number,
+        default: 0,
+      },
+      campaignsCount: {
+        type: Number,
+        default: 0,
+      },
+      receivedDonationsCount: {
+        type: Number,
+        default: 0,
+      },
+      receivedAmount: {
+        type: Number,
+        default: 0,
+      },
+    }),
+    default: {
+      followersCount: 0,
+      campaignsCount: 0,
+      receivedDonationsCount: 0,
+      receivedAmount: 0,
+    },
   })
   stats?: InstitutionStats;
 

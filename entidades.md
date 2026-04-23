@@ -8,7 +8,7 @@
 
 # 1. Introdução
 
-Este documento apresenta as entidades principais do projeto da plataforma mobile de doações, seus respectivos campos e os relacionamentos conceituais entre elas. A modelagem foi pensada para utilização com **MongoDB**, considerando collections independentes, referências por identificadores e alguns relacionamentos polimórficos quando necessário.
+Este documento apresenta as entidades principais do projeto da plataforma mobile de doações, seus respectivos campos, estruturas internas e relacionamentos conceituais. A modelagem foi pensada para utilização com **MongoDB**, considerando collections independentes, referências por identificadores e alguns relacionamentos polimórficos quando necessário.
 
 O objetivo deste documento é servir como base para:
 - modelagem do banco de dados;
@@ -18,19 +18,32 @@ O objetivo deste documento é servir como base para:
 
 ---
 
-# 2. Visão geral da modelagem
+# 2. Convenções utilizadas
 
-A plataforma é composta por entidades relacionadas a:
-- identidade e acesso;
-- instituições e seus funcionários;
-- campanhas;
-- doações e pagamentos;
-- rastreamento e comprovantes;
-- feed social e interações;
-- mensagens e notificações;
-- moderação e auditoria.
+## 2.1. Tipos
+- `ObjectId`: identificador MongoDB
+- `string`: texto
+- `boolean`: verdadeiro ou falso
+- `date`: data/hora
+- `int`: número inteiro
+- `number`: número decimal
+- `object`: objeto composto
+- `object[]`: lista de objetos
+- `enum`: valor textual restrito a uma lista fixa
+- `enum[]`: lista de valores restritos
 
-No MongoDB, os relacionamentos serão representados principalmente por campos como `userId`, `institutionId`, `campaignId`, `donationId` e semelhantes, sendo a integridade referencial tratada pela aplicação.
+## 2.2. Obrigatoriedade
+- **Obrigatório: sim** → o campo deve existir no cadastro principal da entidade
+- **Obrigatório: não** → o campo é opcional ou depende do contexto
+
+## 2.3. Observação sobre MongoDB
+Como o banco do projeto é MongoDB, os relacionamentos serão tratados principalmente por referências entre collections, utilizando campos como:
+- `userId`
+- `institutionId`
+- `campaignId`
+- `donationId`
+
+A integridade referencial será responsabilidade da aplicação.
 
 ---
 
@@ -48,23 +61,82 @@ Representa pessoas que utilizam a plataforma. Pode corresponder a:
 `users`
 
 ### Campos
-- `_id`: ObjectId — identificador único do usuário
-- `type`: string — tipo da entidade, por exemplo `PERSON`
-- `role`: string — papel do usuário, como `PLATFORM_ADMIN`, `DONOR` ou `INSTITUTION_STAFF`
-- `fullName`: string — nome completo
-- `email`: string — e-mail do usuário
-- `phone`: string — telefone
-- `cpf`: string — CPF do usuário padrão
-- `passwordHash`: string — hash da senha
-- `birthDate`: date — data de nascimento
-- `profilePhotoUrl`: string — URL da foto de perfil
-- `bio`: string — descrição curta do perfil
-- `status`: string — situação da conta, como `ACTIVE`, `SUSPENDED` ou `PENDING_VERIFICATION`
-- `isVerified`: boolean — indica se a conta foi verificada
-- `settings`: object — preferências do usuário
-- `stats`: object — estatísticas agregadas do usuário
-- `createdAt`: date — data de criação
-- `updatedAt`: date — data da última atualização
+- `_id`: ObjectId — identificador único do usuário  
+  - obrigatório: sim
+
+- `type`: enum — tipo da entidade de usuário  
+  - obrigatório: sim
+  - valores possíveis:
+    - `PERSON`
+
+- `role`: enum — papel do usuário na plataforma  
+  - obrigatório: sim
+  - valores possíveis:
+    - `PLATFORM_ADMIN` — administrador da plataforma
+    - `DONOR` — usuário padrão doador
+    - `INSTITUTION_STAFF` — funcionário de instituição
+
+- `fullName`: string — nome completo  
+  - obrigatório: sim
+
+- `email`: string — e-mail do usuário  
+  - obrigatório: sim
+
+- `phone`: string — telefone do usuário  
+  - obrigatório: não
+
+- `cpf`: string — CPF do usuário  
+  - obrigatório: não
+  - observação: aplicável principalmente ao usuário padrão
+
+- `passwordHash`: string — hash da senha  
+  - obrigatório: sim
+
+- `birthDate`: date — data de nascimento  
+  - obrigatório: não
+
+- `profilePhotoUrl`: string — URL da foto de perfil  
+  - obrigatório: não
+
+- `bio`: string — descrição curta do perfil  
+  - obrigatório: não
+
+- `status`: enum — situação da conta  
+  - obrigatório: sim
+  - valores possíveis:
+    - `ACTIVE`
+    - `PENDING_VERIFICATION`
+    - `SUSPENDED`
+    - `DELETED`
+
+- `isVerified`: boolean — indica se a conta foi verificada  
+  - obrigatório: sim
+
+- `settings`: object — preferências do usuário  
+  - obrigatório: não
+  - estrutura:
+    - `privateProfile`: boolean — indica se o perfil é privado
+    - `allowMessagesFrom`: enum — define quem pode enviar mensagens
+      - `EVERYONE`
+      - `FOLLOWING`
+      - `NONE`
+    - `notifications`: object — preferências de notificação
+      - `push`: boolean — ativa notificações push
+      - `email`: boolean — ativa notificações por e-mail
+
+- `stats`: object — métricas agregadas do usuário  
+  - obrigatório: não
+  - estrutura:
+    - `totalDonatedAmount`: number — valor total já doado
+    - `totalDonationsCount`: int — quantidade de doações realizadas
+    - `followingInstitutionsCount`: int — quantidade de instituições seguidas
+    - `followingCampaignsCount`: int — quantidade de campanhas seguidas
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `USERS 1:N INSTITUTION_STAFF_MEMBERSHIPS`
@@ -89,26 +161,96 @@ Representa as instituições que recebem doações e publicam campanhas.
 `institutions`
 
 ### Campos
-- `_id`: ObjectId — identificador único da instituição
-- `legalName`: string — razão social
-- `displayName`: string — nome exibido na plataforma
-- `cnpj`: string — CNPJ
-- `email`: string — e-mail institucional
-- `phone`: string — telefone
-- `description`: string — descrição da instituição
-- `categoryIds`: ObjectId[] — categorias associadas
-- `logoUrl`: string — URL da logo
-- `coverPhotoUrl`: string — URL da imagem de capa
-- `website`: string — site institucional
-- `status`: string — status da instituição, como `PENDING_APPROVAL`, `ACTIVE`, `SUSPENDED`
-- `verification`: object — dados de verificação e aprovação
-- `address`: object — endereço completo e localização
-- `acceptedDonationTypes`: string[] — tipos de doação aceitos
-- `pixKey`: string — chave PIX
-- `taxReceiptEnabled`: boolean — indica se a instituição emite comprovante
-- `stats`: object — métricas agregadas
-- `createdAt`: date — data de criação
-- `updatedAt`: date — data da última atualização
+- `_id`: ObjectId — identificador único da instituição  
+  - obrigatório: sim
+
+- `legalName`: string — razão social  
+  - obrigatório: sim
+
+- `displayName`: string — nome exibido na plataforma  
+  - obrigatório: sim
+
+- `cnpj`: string — CNPJ  
+  - obrigatório: sim
+
+- `email`: string — e-mail institucional  
+  - obrigatório: sim
+
+- `phone`: string — telefone  
+  - obrigatório: não
+
+- `description`: string — descrição da instituição  
+  - obrigatório: não
+
+- `categoryIds`: ObjectId[] — lista de categorias associadas  
+  - obrigatório: não
+
+- `logoUrl`: string — URL da logo  
+  - obrigatório: não
+
+- `coverPhotoUrl`: string — URL da imagem de capa  
+  - obrigatório: não
+
+- `website`: string — site institucional  
+  - obrigatório: não
+
+- `status`: enum — situação da instituição  
+  - obrigatório: sim
+  - valores possíveis:
+    - `PENDING_APPROVAL`
+    - `ACTIVE`
+    - `SUSPENDED`
+    - `REJECTED`
+
+- `verification`: object — dados de validação da instituição  
+  - obrigatório: não
+  - estrutura:
+    - `isVerified`: boolean — indica se foi verificada
+    - `verifiedAt`: date — data da verificação
+    - `verifiedByUserId`: ObjectId — administrador responsável pela verificação
+
+- `address`: object — endereço e geolocalização  
+  - obrigatório: não
+  - estrutura:
+    - `street`: string
+    - `number`: string
+    - `district`: string
+    - `city`: string
+    - `state`: string
+    - `zipCode`: string
+    - `country`: string
+    - `location`: object
+      - `type`: string — normalmente `Point`
+      - `coordinates`: number[] — longitude e latitude
+
+- `acceptedDonationTypes`: enum[] — tipos de doação aceitos  
+  - obrigatório: não
+  - valores possíveis:
+    - `MONEY`
+    - `CLOTHES`
+    - `FOOD`
+    - `TOYS`
+    - `HYGIENE`
+
+- `pixKey`: string — chave PIX  
+  - obrigatório: não
+
+- `taxReceiptEnabled`: boolean — indica se a instituição pode emitir comprovantes  
+  - obrigatório: sim
+
+- `stats`: object — métricas agregadas da instituição  
+  - obrigatório: não
+  - estrutura:
+    - `followersCount`: int
+    - `campaignsCount`: int
+    - `receivedDonationsCount`: int
+    - `receivedAmount`: number
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `INSTITUTIONS 1:N INSTITUTION_STAFF_MEMBERSHIPS`
@@ -129,15 +271,48 @@ Representa o vínculo entre um usuário e uma instituição, incluindo papel e p
 `institution_staff_memberships`
 
 ### Campos
-- `_id`: ObjectId — identificador único do vínculo
-- `institutionId`: ObjectId — referência da instituição
-- `userId`: ObjectId — referência do usuário
-- `role`: string — função dentro da instituição, como `OWNER`, `ADMIN`, `VOLUNTEER`
-- `permissions`: string[] — permissões específicas
-- `status`: string — situação do vínculo
-- `invitedByUserId`: ObjectId — usuário que realizou o convite
-- `createdAt`: date — data de criação
-- `updatedAt`: date — data da última atualização
+- `_id`: ObjectId — identificador único do vínculo  
+  - obrigatório: sim
+
+- `institutionId`: ObjectId — referência da instituição  
+  - obrigatório: sim
+
+- `userId`: ObjectId — referência do usuário  
+  - obrigatório: sim
+
+- `role`: enum — função dentro da instituição  
+  - obrigatório: sim
+  - valores possíveis:
+    - `OWNER`
+    - `ADMIN`
+    - `MANAGER`
+    - `VOLUNTEER`
+    - `DELIVERY_OPERATOR`
+
+- `permissions`: string[] — permissões específicas do vínculo  
+  - obrigatório: não
+  - exemplos:
+    - `CREATE_CAMPAIGN`
+    - `EDIT_CAMPAIGN`
+    - `VIEW_DONATIONS`
+    - `MANAGE_STAFF`
+    - `GENERATE_RECEIPTS`
+
+- `status`: enum — situação do vínculo  
+  - obrigatório: sim
+  - valores possíveis:
+    - `ACTIVE`
+    - `INVITED`
+    - `REMOVED`
+
+- `invitedByUserId`: ObjectId — usuário que convidou  
+  - obrigatório: não
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `INSTITUTION_STAFF_MEMBERSHIPS N:1 USERS`
@@ -154,25 +329,103 @@ Representa campanhas de arrecadação criadas por instituições.
 `campaigns`
 
 ### Campos
-- `_id`: ObjectId — identificador único da campanha
-- `institutionId`: ObjectId — referência da instituição responsável
-- `createdByUserId`: ObjectId — usuário que criou a campanha
-- `title`: string — título da campanha
-- `description`: string — descrição da campanha
-- `bannerUrl`: string — imagem principal da campanha
-- `status`: string — status da campanha
-- `donationTypes`: string[] — tipos de doação aceitos
-- `acceptedItems`: object[] — itens aceitos, quando aplicável
-- `goal`: object — metas da campanha
-- `progress`: object — progresso alcançado
-- `visibility`: string — nível de visibilidade
-- `startAt`: date — data de início
-- `endAt`: date — data de término
-- `address`: object — local de recebimento ou referência de endereço
-- `tags`: string[] — palavras-chave
-- `stats`: object — métricas agregadas
-- `createdAt`: date — data de criação
-- `updatedAt`: date — data da última atualização
+- `_id`: ObjectId — identificador único da campanha  
+  - obrigatório: sim
+
+- `institutionId`: ObjectId — referência da instituição responsável  
+  - obrigatório: sim
+
+- `createdByUserId`: ObjectId — usuário que criou a campanha  
+  - obrigatório: sim
+
+- `title`: string — título da campanha  
+  - obrigatório: sim
+
+- `description`: string — descrição da campanha  
+  - obrigatório: não
+
+- `bannerUrl`: string — imagem principal da campanha  
+  - obrigatório: não
+
+- `status`: enum — status da campanha  
+  - obrigatório: sim
+  - valores possíveis:
+    - `DRAFT`
+    - `PUBLISHED`
+    - `PAUSED`
+    - `FINISHED`
+    - `CANCELED`
+
+- `donationTypes`: enum[] — tipos de doação aceitos na campanha  
+  - obrigatório: sim
+  - valores possíveis:
+    - `MONEY`
+    - `ITEM`
+
+- `acceptedItems`: object[] — lista de itens aceitos  
+  - obrigatório: não
+  - observação: aplicável principalmente quando `donationTypes` inclui `ITEM`
+  - estrutura de cada item:
+    - `category`: enum
+      - `CLOTHES`
+      - `FOOD`
+      - `HYGIENE`
+      - `TOYS`
+      - `OTHER`
+    - `name`: string
+    - `description`: string
+
+- `goal`: object — metas da campanha  
+  - obrigatório: não
+  - estrutura:
+    - `moneyTarget`: number — meta financeira
+    - `itemsTarget`: int — meta de quantidade de itens
+
+- `progress`: object — progresso atual  
+  - obrigatório: não
+  - estrutura:
+    - `moneyRaised`: number
+    - `itemsRaised`: int
+
+- `visibility`: enum — visibilidade da campanha  
+  - obrigatório: sim
+  - valores possíveis:
+    - `PUBLIC`
+    - `FOLLOWERS_ONLY`
+
+- `startAt`: date — data de início  
+  - obrigatório: não
+
+- `endAt`: date — data de término  
+  - obrigatório: não
+
+- `address`: object — referência de endereço da campanha  
+  - obrigatório: não
+  - estrutura:
+    - `sameAsInstitution`: boolean — indica se usa o endereço da instituição
+    - `street`: string
+    - `number`: string
+    - `district`: string
+    - `city`: string
+    - `state`: string
+    - `zipCode`: string
+    - `country`: string
+
+- `tags`: string[] — palavras-chave  
+  - obrigatório: não
+
+- `stats`: object — métricas agregadas  
+  - obrigatório: não
+  - estrutura:
+    - `followersCount`: int
+    - `donationsCount`: int
+    - `postsCount`: int
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `CAMPAIGNS N:1 INSTITUTIONS`
@@ -191,23 +444,103 @@ Representa uma doação realizada por um usuário para uma instituição, podend
 `donations`
 
 ### Campos
-- `_id`: ObjectId — identificador único da doação
-- `donorUserId`: ObjectId — referência do usuário doador
-- `institutionId`: ObjectId — referência da instituição
-- `campaignId`: ObjectId — referência da campanha, quando existir
-- `type`: string — tipo da doação, como `MONEY` ou `ITEM`
-- `status`: string — status atual da doação
-- `visibility`: string — visibilidade da doação
-- `moneyDonation`: object — dados da doação monetária
-- `itemDonation`: object — dados da doação de itens
-- `deliveryMode`: string — modo de entrega
-- `scheduledAt`: date — data agendada de entrega ou coleta
-- `note`: string — observações do doador
-- `receiptEligible`: boolean — indica elegibilidade para comprovante
-- `proofPhotoUrl`: string — URL de prova, quando existir
-- `deliveredAt`: date — data de entrega
-- `createdAt`: date — data de criação
-- `updatedAt`: date — data da última atualização
+- `_id`: ObjectId — identificador único da doação  
+  - obrigatório: sim
+
+- `donorUserId`: ObjectId — referência do usuário doador  
+  - obrigatório: sim
+
+- `institutionId`: ObjectId — referência da instituição  
+  - obrigatório: sim
+
+- `campaignId`: ObjectId — referência da campanha  
+  - obrigatório: não
+  - observação: pode ser nulo em doação direta para a instituição
+
+- `type`: enum — tipo da doação  
+  - obrigatório: sim
+  - valores possíveis:
+    - `MONEY`
+    - `ITEM`
+
+- `status`: enum — status atual da doação  
+  - obrigatório: sim
+  - valores possíveis:
+    - `CREATED`
+    - `PENDING_PAYMENT`
+    - `PAID`
+    - `SCHEDULED_PICKUP`
+    - `IN_TRANSIT`
+    - `DELIVERED`
+    - `CANCELED`
+    - `FAILED`
+
+- `visibility`: enum — visibilidade da doação  
+  - obrigatório: sim
+  - valores possíveis:
+    - `PUBLIC`
+    - `PRIVATE`
+    - `ANONYMOUS_PUBLIC`
+
+- `moneyDonation`: object — dados da doação monetária  
+  - obrigatório: não
+  - observação: usado quando `type = MONEY`
+  - estrutura:
+    - `amount`: number — valor da doação
+    - `currency`: string — moeda, por exemplo `BRL`
+
+- `itemDonation`: object — dados da doação de itens  
+  - obrigatório: não
+  - observação: usado quando `type = ITEM`
+  - estrutura:
+    - `items`: object[] — itens doados
+      - `category`: enum
+        - `CLOTHES`
+        - `FOOD`
+        - `HYGIENE`
+        - `TOYS`
+        - `OTHER`
+      - `name`: string
+      - `quantity`: int
+      - `unit`: enum
+        - `UNIT`
+        - `KG`
+        - `LITER`
+        - `BOX`
+      - `condition`: enum
+        - `NEW`
+        - `USED_GOOD`
+        - `USED_ACCEPTABLE`
+    - `estimatedValue`: number — valor estimado total dos itens
+
+- `deliveryMode`: enum — forma de entrega  
+  - obrigatório: sim
+  - valores possíveis:
+    - `INSTANT_ONLINE`
+    - `DROP_OFF`
+    - `PICKUP`
+    - `SHIPPING`
+
+- `scheduledAt`: date — data agendada de entrega ou coleta  
+  - obrigatório: não
+
+- `note`: string — observações do doador  
+  - obrigatório: não
+
+- `receiptEligible`: boolean — indica elegibilidade para comprovante  
+  - obrigatório: sim
+
+- `proofPhotoUrl`: string — URL da foto de prova  
+  - obrigatório: não
+
+- `deliveredAt`: date — data de entrega  
+  - obrigatório: não
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `DONATIONS N:1 USERS` pelo campo `donorUserId`
@@ -230,14 +563,52 @@ Registra a evolução dos status de uma doação.
 `donation_status_history`
 
 ### Campos
-- `_id`: ObjectId — identificador único do histórico
-- `donationId`: ObjectId — referência da doação
-- `fromStatus`: string — status anterior
-- `toStatus`: string — novo status
-- `changedByUserId`: ObjectId — usuário responsável pela alteração
-- `source`: string — origem da alteração, como `SYSTEM`, `DONOR`, `INSTITUTION_STAFF`, `PAYMENT_WEBHOOK`
-- `note`: string — observação sobre a alteração
-- `createdAt`: date — data da alteração
+- `_id`: ObjectId — identificador único do histórico  
+  - obrigatório: sim
+
+- `donationId`: ObjectId — referência da doação  
+  - obrigatório: sim
+
+- `fromStatus`: enum — status anterior  
+  - obrigatório: não
+  - valores possíveis:
+    - `CREATED`
+    - `PENDING_PAYMENT`
+    - `PAID`
+    - `SCHEDULED_PICKUP`
+    - `IN_TRANSIT`
+    - `DELIVERED`
+    - `CANCELED`
+    - `FAILED`
+
+- `toStatus`: enum — novo status  
+  - obrigatório: sim
+  - valores possíveis:
+    - `CREATED`
+    - `PENDING_PAYMENT`
+    - `PAID`
+    - `SCHEDULED_PICKUP`
+    - `IN_TRANSIT`
+    - `DELIVERED`
+    - `CANCELED`
+    - `FAILED`
+
+- `changedByUserId`: ObjectId — usuário responsável  
+  - obrigatório: não
+
+- `source`: enum — origem da alteração  
+  - obrigatório: sim
+  - valores possíveis:
+    - `SYSTEM`
+    - `DONOR`
+    - `INSTITUTION_STAFF`
+    - `PAYMENT_WEBHOOK`
+
+- `note`: string — observação sobre a alteração  
+  - obrigatório: não
+
+- `createdAt`: date — data da alteração  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `DONATION_STATUS_HISTORY N:1 DONATIONS`
@@ -254,22 +625,75 @@ Representa o pagamento de uma doação monetária.
 `payments`
 
 ### Campos
-- `_id`: ObjectId — identificador único do pagamento
-- `donationId`: ObjectId — referência da doação
-- `donorUserId`: ObjectId — referência do usuário doador
-- `institutionId`: ObjectId — referência da instituição
-- `gateway`: string — gateway de pagamento utilizado
-- `gatewayTransactionId`: string — identificador externo da transação
-- `paymentMethod`: string — método de pagamento
-- `amount`: float — valor do pagamento
-- `currency`: string — moeda
-- `status`: string — status do pagamento
-- `pix`: object — dados de PIX, quando aplicável
-- `gatewayPayload`: object — payload bruto do gateway, quando necessário
-- `paidAt`: date — data de confirmação do pagamento
-- `refundedAt`: date — data de reembolso, quando houver
-- `createdAt`: date — data de criação
-- `updatedAt`: date — data da última atualização
+- `_id`: ObjectId — identificador único do pagamento  
+  - obrigatório: sim
+
+- `donationId`: ObjectId — referência da doação  
+  - obrigatório: sim
+
+- `donorUserId`: ObjectId — referência do usuário doador  
+  - obrigatório: sim
+
+- `institutionId`: ObjectId — referência da instituição  
+  - obrigatório: sim
+
+- `gateway`: enum — provedor de pagamento  
+  - obrigatório: sim
+  - valores possíveis:
+    - `STRIPE`
+    - `MERCADO_PAGO`
+    - `PAGSEGURO`
+    - `IUGU`
+
+- `gatewayTransactionId`: string — identificador externo da transação  
+  - obrigatório: não
+
+- `paymentMethod`: enum — método de pagamento  
+  - obrigatório: sim
+  - valores possíveis:
+    - `PIX`
+    - `CREDIT_CARD`
+    - `DEBIT_CARD`
+    - `BOLETO`
+
+- `amount`: number — valor do pagamento  
+  - obrigatório: sim
+
+- `currency`: string — moeda  
+  - obrigatório: sim
+
+- `status`: enum — status do pagamento  
+  - obrigatório: sim
+  - valores possíveis:
+    - `PENDING`
+    - `AUTHORIZED`
+    - `PAID`
+    - `REFUNDED`
+    - `FAILED`
+    - `CANCELED`
+
+- `pix`: object — dados específicos de PIX  
+  - obrigatório: não
+  - estrutura:
+    - `qrCodeText`: string
+    - `qrCodeImageUrl`: string
+    - `expiresAt`: date
+
+- `gatewayPayload`: object — payload bruto da integração  
+  - obrigatório: não
+  - observação: armazenado apenas quando necessário para auditoria ou conciliação
+
+- `paidAt`: date — data de confirmação  
+  - obrigatório: não
+
+- `refundedAt`: date — data de reembolso  
+  - obrigatório: não
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `PAYMENTS N:1 DONATIONS`
@@ -287,14 +711,38 @@ Registra eventos de rastreamento da doação física.
 `tracking_events`
 
 ### Campos
-- `_id`: ObjectId — identificador único do evento
-- `donationId`: ObjectId — referência da doação
-- `eventType`: string — tipo do evento
-- `location`: object — localização geográfica
-- `description`: string — descrição do evento
-- `actorUserId`: ObjectId — usuário responsável pelo registro
-- `photoUrl`: string — foto associada ao evento, quando aplicável
-- `createdAt`: date — data do registro
+- `_id`: ObjectId — identificador único do evento  
+  - obrigatório: sim
+
+- `donationId`: ObjectId — referência da doação  
+  - obrigatório: sim
+
+- `eventType`: enum — tipo do evento  
+  - obrigatório: sim
+  - valores possíveis:
+    - `PICKUP_CONFIRMED`
+    - `DRIVER_ASSIGNED`
+    - `IN_TRANSIT`
+    - `ARRIVED`
+    - `DELIVERED`
+
+- `location`: object — localização geográfica  
+  - obrigatório: não
+  - estrutura:
+    - `type`: string — normalmente `Point`
+    - `coordinates`: number[] — longitude e latitude
+
+- `description`: string — descrição do evento  
+  - obrigatório: não
+
+- `actorUserId`: ObjectId — usuário responsável pelo registro  
+  - obrigatório: não
+
+- `photoUrl`: string — foto associada ao evento  
+  - obrigatório: não
+
+- `createdAt`: date — data do registro  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `TRACKING_EVENTS N:1 DONATIONS`
@@ -310,14 +758,33 @@ Representa a comprovação formal da entrega da doação.
 `delivery_proofs`
 
 ### Campos
-- `_id`: ObjectId — identificador único da prova
-- `donationId`: ObjectId — referência da doação
-- `photoUrl`: string — URL da foto de comprovação
-- `description`: string — descrição da entrega
-- `confirmedByUserId`: ObjectId — usuário que confirmou
-- `confirmedAt`: date — data de confirmação
-- `metadata`: object — metadados adicionais
-- `createdAt`: date — data de criação
+- `_id`: ObjectId — identificador único da prova  
+  - obrigatório: sim
+
+- `donationId`: ObjectId — referência da doação  
+  - obrigatório: sim
+
+- `photoUrl`: string — URL da foto de comprovação  
+  - obrigatório: sim
+
+- `description`: string — descrição da entrega  
+  - obrigatório: não
+
+- `confirmedByUserId`: ObjectId — usuário que confirmou  
+  - obrigatório: não
+
+- `confirmedAt`: date — data de confirmação  
+  - obrigatório: não
+
+- `metadata`: object — informações adicionais da prova  
+  - obrigatório: não
+  - estrutura:
+    - `latitude`: number
+    - `longitude`: number
+    - `deviceInfo`: string — informação do dispositivo, se aplicável
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `DELIVERY_PROOFS N:1 DONATIONS`
@@ -334,18 +801,47 @@ Representa comprovantes de doação emitidos para consulta e fins fiscais.
 `tax_receipts`
 
 ### Campos
-- `_id`: ObjectId — identificador único do comprovante
-- `donationId`: ObjectId — referência da doação
-- `donorUserId`: ObjectId — referência do doador
-- `institutionId`: ObjectId — referência da instituição
-- `receiptNumber`: string — número do comprovante
-- `type`: string — tipo do comprovante
-- `amount`: float — valor associado
-- `issuedAt`: date — data de emissão
-- `documentUrl`: string — URL do documento
-- `metadata`: object — dados auxiliares
-- `year`: int — ano de referência
-- `createdAt`: date — data de criação
+- `_id`: ObjectId — identificador único do comprovante  
+  - obrigatório: sim
+
+- `donationId`: ObjectId — referência da doação  
+  - obrigatório: sim
+
+- `donorUserId`: ObjectId — referência do doador  
+  - obrigatório: sim
+
+- `institutionId`: ObjectId — referência da instituição  
+  - obrigatório: sim
+
+- `receiptNumber`: string — número do comprovante  
+  - obrigatório: sim
+
+- `type`: enum — tipo do comprovante  
+  - obrigatório: sim
+  - valores possíveis:
+    - `DONATION_RECEIPT`
+    - `TAX_STATEMENT`
+
+- `amount`: number — valor associado  
+  - obrigatório: sim
+
+- `issuedAt`: date — data de emissão  
+  - obrigatório: sim
+
+- `documentUrl`: string — URL do documento emitido  
+  - obrigatório: não
+
+- `metadata`: object — dados auxiliares  
+  - obrigatório: não
+  - estrutura:
+    - `donorCpfMasked`: string — CPF mascarado
+    - `institutionCnpj`: string — CNPJ da instituição
+
+- `year`: int — ano de referência  
+  - obrigatório: sim
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `TAX_RECEIPTS N:1 DONATIONS`
@@ -363,18 +859,31 @@ Representa o ato de seguir uma instituição, campanha ou eventualmente outro us
 `follows`
 
 ### Campos
-- `_id`: ObjectId — identificador único do relacionamento
-- `followerUserId`: ObjectId — usuário que está seguindo
-- `targetType`: string — tipo do alvo seguido
-- `targetId`: ObjectId — identificador do alvo seguido
-- `createdAt`: date — data de criação
+- `_id`: ObjectId — identificador único do relacionamento  
+  - obrigatório: sim
+
+- `followerUserId`: ObjectId — usuário que está seguindo  
+  - obrigatório: sim
+
+- `targetType`: enum — tipo do alvo seguido  
+  - obrigatório: sim
+  - valores possíveis:
+    - `INSTITUTION`
+    - `CAMPAIGN`
+    - `USER`
+
+- `targetId`: ObjectId — identificador do alvo seguido  
+  - obrigatório: sim
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `FOLLOWS N:1 USERS` pelo campo `followerUserId`
 - relacionamento polimórfico com:
   - `INSTITUTIONS`
   - `CAMPAIGNS`
-  - `USERS` opcionalmente
+  - `USERS`
 
 ---
 
@@ -387,17 +896,55 @@ Representa publicações do feed social.
 `posts`
 
 ### Campos
-- `_id`: ObjectId — identificador único do post
-- `authorType`: string — tipo do autor
-- `authorId`: ObjectId — identificador do autor
-- `campaignId`: ObjectId — campanha associada, quando aplicável
-- `institutionId`: ObjectId — instituição associada, quando aplicável
-- `content`: string — conteúdo textual
-- `media`: object[] — mídias vinculadas
-- `visibility`: string — nível de visibilidade
-- `stats`: object — estatísticas agregadas
-- `createdAt`: date — data de criação
-- `updatedAt`: date — data da última atualização
+- `_id`: ObjectId — identificador único do post  
+  - obrigatório: sim
+
+- `authorType`: enum — tipo do autor  
+  - obrigatório: sim
+  - valores possíveis:
+    - `USER`
+    - `INSTITUTION`
+
+- `authorId`: ObjectId — identificador do autor  
+  - obrigatório: sim
+  - observação: o destino depende do `authorType`
+
+- `campaignId`: ObjectId — campanha associada  
+  - obrigatório: não
+
+- `institutionId`: ObjectId — instituição associada  
+  - obrigatório: não
+
+- `content`: string — conteúdo textual  
+  - obrigatório: sim
+
+- `media`: object[] — mídias anexadas  
+  - obrigatório: não
+  - estrutura de cada item:
+    - `type`: enum
+      - `IMAGE`
+      - `VIDEO`
+      - `FILE`
+    - `url`: string
+
+- `visibility`: enum — visibilidade do post  
+  - obrigatório: sim
+  - valores possíveis:
+    - `PUBLIC`
+    - `FOLLOWERS_ONLY`
+
+- `stats`: object — estatísticas agregadas  
+  - obrigatório: não
+  - estrutura:
+    - `likesCount`: int
+    - `commentsCount`: int
+    - `sharesCount`: int
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `POSTS N:1 USERS` quando `authorType = USER`
@@ -417,13 +964,27 @@ Representa comentários realizados em publicações.
 `post_comments`
 
 ### Campos
-- `_id`: ObjectId — identificador único do comentário
-- `postId`: ObjectId — referência do post
-- `userId`: ObjectId — referência do autor do comentário
-- `parentCommentId`: ObjectId — comentário pai, quando for resposta
-- `content`: string — conteúdo textual
-- `createdAt`: date — data de criação
-- `updatedAt`: date — data da última atualização
+- `_id`: ObjectId — identificador único do comentário  
+  - obrigatório: sim
+
+- `postId`: ObjectId — referência do post  
+  - obrigatório: sim
+
+- `userId`: ObjectId — referência do autor do comentário  
+  - obrigatório: sim
+
+- `parentCommentId`: ObjectId — comentário pai  
+  - obrigatório: não
+  - observação: usado quando o comentário é resposta de outro comentário
+
+- `content`: string — conteúdo textual  
+  - obrigatório: sim
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `POST_COMMENTS N:1 POSTS`
@@ -441,11 +1002,22 @@ Representa curtidas ou reações em posts.
 `post_reactions`
 
 ### Campos
-- `_id`: ObjectId — identificador único da reação
-- `postId`: ObjectId — referência do post
-- `userId`: ObjectId — referência do usuário
-- `type`: string — tipo de reação
-- `createdAt`: date — data de criação
+- `_id`: ObjectId — identificador único da reação  
+  - obrigatório: sim
+
+- `postId`: ObjectId — referência do post  
+  - obrigatório: sim
+
+- `userId`: ObjectId — referência do usuário  
+  - obrigatório: sim
+
+- `type`: enum — tipo de reação  
+  - obrigatório: sim
+  - valores possíveis:
+    - `LIKE`
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `POST_REACTIONS N:1 POSTS`
@@ -462,14 +1034,32 @@ Representa conversas no módulo de chat.
 `conversations`
 
 ### Campos
-- `_id`: ObjectId — identificador único da conversa
-- `type`: string — tipo da conversa, como `DIRECT` ou `GROUP`
-- `participantIds`: ObjectId[] — participantes da conversa
-- `institutionId`: ObjectId — referência institucional, quando houver
-- `campaignId`: ObjectId — referência de campanha, quando houver
-- `lastMessageAt`: date — data da última mensagem
-- `createdAt`: date — data de criação
-- `updatedAt`: date — data da última atualização
+- `_id`: ObjectId — identificador único da conversa  
+  - obrigatório: sim
+
+- `type`: enum — tipo da conversa  
+  - obrigatório: sim
+  - valores possíveis:
+    - `DIRECT`
+    - `GROUP`
+
+- `participantIds`: ObjectId[] — participantes da conversa  
+  - obrigatório: sim
+
+- `institutionId`: ObjectId — referência institucional  
+  - obrigatório: não
+
+- `campaignId`: ObjectId — referência de campanha  
+  - obrigatório: não
+
+- `lastMessageAt`: date — data da última mensagem  
+  - obrigatório: não
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `CONVERSATIONS 1:N MESSAGES`
@@ -485,15 +1075,47 @@ Representa mensagens trocadas nas conversas.
 `messages`
 
 ### Campos
-- `_id`: ObjectId — identificador único da mensagem
-- `conversationId`: ObjectId — referência da conversa
-- `senderUserId`: ObjectId — referência do remetente
-- `content`: string — conteúdo da mensagem
-- `messageType`: string — tipo da mensagem
-- `attachments`: object[] — anexos
-- `readBy`: object[] — informações de leitura
-- `createdAt`: date — data de criação
-- `updatedAt`: date — data da última atualização
+- `_id`: ObjectId — identificador único da mensagem  
+  - obrigatório: sim
+
+- `conversationId`: ObjectId — referência da conversa  
+  - obrigatório: sim
+
+- `senderUserId`: ObjectId — referência do remetente  
+  - obrigatório: sim
+
+- `content`: string — conteúdo da mensagem  
+  - obrigatório: não
+  - observação: pode ser vazio em mensagem apenas com anexo
+
+- `messageType`: enum — tipo da mensagem  
+  - obrigatório: sim
+  - valores possíveis:
+    - `TEXT`
+    - `IMAGE`
+    - `FILE`
+    - `SYSTEM`
+
+- `attachments`: object[] — anexos da mensagem  
+  - obrigatório: não
+  - estrutura de cada item:
+    - `type`: enum
+      - `IMAGE`
+      - `FILE`
+    - `url`: string
+    - `fileName`: string
+
+- `readBy`: object[] — usuários que leram a mensagem  
+  - obrigatório: não
+  - estrutura de cada item:
+    - `userId`: ObjectId
+    - `readAt`: date
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `MESSAGES N:1 CONVERSATIONS`
@@ -510,14 +1132,38 @@ Representa notificações enviadas aos usuários.
 `notifications`
 
 ### Campos
-- `_id`: ObjectId — identificador único da notificação
-- `userId`: ObjectId — usuário destinatário
-- `type`: string — tipo da notificação
-- `title`: string — título
-- `body`: string — corpo textual
-- `data`: object — dados adicionais
-- `readAt`: date — data de leitura
-- `createdAt`: date — data de criação
+- `_id`: ObjectId — identificador único da notificação  
+  - obrigatório: sim
+
+- `userId`: ObjectId — usuário destinatário  
+  - obrigatório: sim
+
+- `type`: enum — tipo da notificação  
+  - obrigatório: sim
+  - valores possíveis:
+    - `DONATION_STATUS_UPDATED`
+    - `NEW_FOLLOWER`
+    - `NEW_MESSAGE`
+    - `CAMPAIGN_UPDATE`
+
+- `title`: string — título  
+  - obrigatório: sim
+
+- `body`: string — corpo textual  
+  - obrigatório: sim
+
+- `data`: object — dados adicionais  
+  - obrigatório: não
+  - exemplos:
+    - `donationId`: ObjectId
+    - `campaignId`: ObjectId
+    - `conversationId`: ObjectId
+
+- `readAt`: date — data de leitura  
+  - obrigatório: não
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `NOTIFICATIONS N:1 USERS`
@@ -533,17 +1179,54 @@ Representa denúncias e registros de moderação.
 `reports`
 
 ### Campos
-- `_id`: ObjectId — identificador único da denúncia
-- `reporterUserId`: ObjectId — usuário denunciante
-- `targetType`: string — tipo da entidade denunciada
-- `targetId`: ObjectId — entidade denunciada
-- `reason`: string — motivo da denúncia
-- `description`: string — detalhamento
-- `status`: string — situação da denúncia
-- `reviewedByUserId`: ObjectId — usuário revisor
-- `reviewedAt`: date — data da revisão
-- `createdAt`: date — data de criação
-- `updatedAt`: date — data da última atualização
+- `_id`: ObjectId — identificador único da denúncia  
+  - obrigatório: sim
+
+- `reporterUserId`: ObjectId — usuário denunciante  
+  - obrigatório: sim
+
+- `targetType`: enum — tipo da entidade denunciada  
+  - obrigatório: sim
+  - valores possíveis:
+    - `USER`
+    - `INSTITUTION`
+    - `POST`
+    - `CAMPAIGN`
+    - `MESSAGE`
+
+- `targetId`: ObjectId — entidade denunciada  
+  - obrigatório: sim
+
+- `reason`: enum — motivo da denúncia  
+  - obrigatório: sim
+  - valores possíveis:
+    - `FRAUD`
+    - `ABUSE`
+    - `SPAM`
+    - `INAPPROPRIATE_CONTENT`
+
+- `description`: string — detalhamento  
+  - obrigatório: não
+
+- `status`: enum — situação da denúncia  
+  - obrigatório: sim
+  - valores possíveis:
+    - `OPEN`
+    - `IN_REVIEW`
+    - `RESOLVED`
+    - `REJECTED`
+
+- `reviewedByUserId`: ObjectId — usuário revisor  
+  - obrigatório: não
+
+- `reviewedAt`: date — data da revisão  
+  - obrigatório: não
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `REPORTS N:1 USERS` pelo campo `reporterUserId`
@@ -565,15 +1248,36 @@ Representa logs de auditoria de ações relevantes no sistema.
 `audit_logs`
 
 ### Campos
-- `_id`: ObjectId — identificador único do log
-- `actorUserId`: ObjectId — usuário que realizou a ação
-- `action`: string — ação executada
-- `targetType`: string — tipo da entidade afetada
-- `targetId`: ObjectId — entidade afetada
-- `metadata`: object — informações adicionais
-- `ip`: string — endereço IP
-- `userAgent`: string — identificador do cliente
-- `createdAt`: date — data do evento
+- `_id`: ObjectId — identificador único do log  
+  - obrigatório: sim
+
+- `actorUserId`: ObjectId — usuário que realizou a ação  
+  - obrigatório: não
+
+- `action`: string — ação executada  
+  - obrigatório: sim
+
+- `targetType`: string — tipo da entidade afetada  
+  - obrigatório: sim
+
+- `targetId`: ObjectId — entidade afetada  
+  - obrigatório: não
+
+- `metadata`: object — informações adicionais  
+  - obrigatório: não
+  - exemplos:
+    - `oldStatus`: string
+    - `newStatus`: string
+    - `notes`: string
+
+- `ip`: string — endereço IP  
+  - obrigatório: não
+
+- `userAgent`: string — identificador do cliente  
+  - obrigatório: não
+
+- `createdAt`: date — data do evento  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `AUDIT_LOGS N:1 USERS`
@@ -590,12 +1294,26 @@ Representa categorias usadas para instituições e itens de doação.
 `categories`
 
 ### Campos
-- `_id`: ObjectId — identificador único da categoria
-- `type`: string — tipo de categoria
-- `name`: string — nome da categoria
-- `slug`: string — identificador textual amigável
-- `isActive`: boolean — indica se está ativa
-- `createdAt`: date — data de criação
+- `_id`: ObjectId — identificador único da categoria  
+  - obrigatório: sim
+
+- `type`: enum — tipo de categoria  
+  - obrigatório: sim
+  - valores possíveis:
+    - `DONATION_ITEM`
+    - `INSTITUTION_CAUSE`
+
+- `name`: string — nome da categoria  
+  - obrigatório: sim
+
+- `slug`: string — identificador textual amigável  
+  - obrigatório: sim
+
+- `isActive`: boolean — indica se está ativa  
+  - obrigatório: sim
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
 
 ### Relacionamentos
 - `CATEGORIES N:N INSTITUTIONS` por meio de `categoryIds`
@@ -640,3 +1358,16 @@ USERS 1:N MESSAGES
 USERS 1:N NOTIFICATIONS
 USERS 1:N REPORTS
 USERS 1:N AUDIT_LOGS
+```
+
+---
+
+# 5. Observações finais
+
+A modelagem proposta busca equilibrar clareza de domínio, rastreabilidade e flexibilidade para evolução futura da plataforma. Como o banco adotado é o MongoDB, os relacionamentos serão tratados conceitualmente pela aplicação e representados por referências entre collections.
+
+Esse documento pode ser utilizado como base para:
+- criação dos schemas do MongoDB;
+- implementação das entidades e DTOs do back-end;
+- documentação acadêmica do projeto;
+- alinhamento funcional entre front-end e back-end.

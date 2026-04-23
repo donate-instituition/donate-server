@@ -1,0 +1,4 @@
+export enum CategoryType {
+  DONATION_ITEM = 'DONATION_ITEM',
+  INSTITUTION_CAUSE = 'INSTITUTION_CAUSE',
+}

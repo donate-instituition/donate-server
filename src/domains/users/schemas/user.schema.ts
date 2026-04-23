@@ -1,12 +1,18 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Prop, raw, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 
-import { UserRole, UserStatus, UserType } from '../models';
+import {
+  UserAllowMessagesFrom,
+  UserRole,
+  UserStatus,
+  UserType,
+} from '../models';
 import type { UserSettings, UserStats } from '../models';
 
 export type UserDocument = HydratedDocument<User>;
 
 @Schema({
+  collection: 'users',
   timestamps: true,
   versionKey: false,
 })
@@ -69,18 +75,71 @@ export class User {
   isVerified!: boolean;
 
   @Prop({
-    required: true,
-    type: MongooseSchema.Types.Mixed,
-    default: {},
+    type: raw({
+      privateProfile: {
+        type: Boolean,
+        default: false,
+      },
+      allowMessagesFrom: {
+        type: String,
+        enum: UserAllowMessagesFrom,
+        default: UserAllowMessagesFrom.EVERYONE,
+      },
+      notifications: {
+        type: {
+          push: {
+            type: Boolean,
+            default: true,
+          },
+          email: {
+            type: Boolean,
+            default: true,
+          },
+        },
+        default: {
+          push: true,
+          email: true,
+        },
+      },
+    }),
+    default: {
+      privateProfile: false,
+      allowMessagesFrom: UserAllowMessagesFrom.EVERYONE,
+      notifications: {
+        push: true,
+        email: true,
+      },
+    },
   })
-  settings!: UserSettings;
+  settings?: UserSettings;
 
   @Prop({
-    required: true,
-    type: MongooseSchema.Types.Mixed,
-    default: {},
+    type: raw({
+      totalDonatedAmount: {
+        type: Number,
+        default: 0,
+      },
+      totalDonationsCount: {
+        type: Number,
+        default: 0,
+      },
+      followingInstitutionsCount: {
+        type: Number,
+        default: 0,
+      },
+      followingCampaignsCount: {
+        type: Number,
+        default: 0,
+      },
+    }),
+    default: {
+      totalDonatedAmount: 0,
+      totalDonationsCount: 0,
+      followingInstitutionsCount: 0,
+      followingCampaignsCount: 0,
+    },
   })
-  stats!: UserStats;
+  stats?: UserStats;
 
   createdAt!: Date;
 

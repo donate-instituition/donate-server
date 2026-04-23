@@ -1,12 +1,12 @@
+import type { InstitutionLocation } from './institution-location.interface';
+
 export interface InstitutionAddress {
   street?: string;
   number?: string;
-  complement?: string;
-  neighborhood?: string;
+  district?: string;
   city?: string;
   state?: string;
-  postalCode?: string;
+  zipCode?: string;
   country?: string;
-  latitude?: number;
-  longitude?: number;
+  location?: InstitutionLocation;
 }

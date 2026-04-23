@@ -1,0 +1,4 @@
+export enum TaxReceiptType {
+  DONATION_RECEIPT = 'DONATION_RECEIPT',
+  TAX_STATEMENT = 'TAX_STATEMENT',
+}

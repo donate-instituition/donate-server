@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 
-import { InstitutionStatus } from '../models';
+import { InstitutionDonationType, InstitutionStatus } from '../models';
 import type {
   InstitutionAddress,
   InstitutionStats,
@@ -18,7 +18,7 @@ export class CreateInstitutionDto {
 
   phone?: string;
 
-  description!: string;
+  description?: string;
 
   categoryIds?: Types.ObjectId[];
 
@@ -34,7 +34,7 @@ export class CreateInstitutionDto {
 
   address?: InstitutionAddress;
 
-  acceptedDonationTypes?: string[];
+  acceptedDonationTypes?: InstitutionDonationType[];
 
   pixKey?: string;
 
