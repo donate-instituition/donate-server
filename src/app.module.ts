@@ -1,5 +1,3 @@
-import 'dotenv/config';
-
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
@@ -25,16 +23,11 @@ import { ReportsModule } from './domains/reports/reports.module';
 import { TaxReceiptsModule } from './domains/tax-receipts/tax-receipts.module';
 import { TrackingEventsModule } from './domains/tracking-events/tracking-events.module';
 import { UsersModule } from './domains/users/users.module';
-
-const mongoUri = process.env.MONGODB_URI;
-
-if (!mongoUri) {
-  throw new Error('MONGODB_URI environment variable is required');
-}
+import { env } from './config/env';
 
 @Module({
   imports: [
-    MongooseModule.forRoot(mongoUri),
+    MongooseModule.forRoot(env.mongodbUri),
     UsersModule,
     AuditLogsModule,
     InstitutionsModule,

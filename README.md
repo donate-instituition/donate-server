@@ -29,7 +29,26 @@
 
 ```bash
 $ npm install
+$ cp .env.example .env
 ```
+
+## Environment variables
+
+The project reads sensitive configuration from environment variables.
+
+Required variables:
+
+```env
+MONGODB_URI=mongodb://localhost:27017/donate-server
+```
+
+Optional variables:
+
+```env
+PORT=3000
+```
+
+If a required variable is missing, the application stops on startup with a clear error message.
 
 ## Compile and run the project
 
