@@ -1,82 +1,98 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 
 import { CreateInstitutionDto } from './dto/create-institution.dto';
 import { UpdateInstitutionDto } from './dto/update-institution.dto';
-
-const INSTITUTIONS = [
-  {
-    id: 'inst-1',
-    name: 'Educação Viva',
-    category: 'Educação',
-    city: 'São Paulo',
-    state: 'SP',
-    activeCampaigns: 2,
-    verified: true,
-    description: 'Promovemos acesso à educação de qualidade para crianças em situação de vulnerabilidade.',
-  },
-  {
-    id: 'inst-2',
-    name: 'Lar Aconchego',
-    category: 'Alimentação',
-    city: 'Curitiba',
-    state: 'PR',
-    activeCampaigns: 1,
-    verified: true,
-    description: 'Distribuímos cestas básicas e refeições para famílias em insegurança alimentar.',
-  },
-  {
-    id: 'inst-3',
-    name: 'Saúde Para Todos',
-    category: 'Saúde',
-    city: 'Belo Horizonte',
-    state: 'MG',
-    activeCampaigns: 1,
-    verified: false,
-    description: 'Oferecemos atendimento médico gratuito em comunidades de periferia.',
-  },
-];
-
-const INSTITUTION_DETAILS: Record<string, { foundedYear: number; email: string; website?: string }> = {
-  'inst-1': { foundedYear: 2010, email: 'contato@educacaoviva.org.br', website: 'https://educacaoviva.org.br' },
-  'inst-2': { foundedYear: 2015, email: 'contato@laraconchego.org.br' },
-  'inst-3': { foundedYear: 2018, email: 'saude@saudeparatodos.org.br', website: 'https://saudeparatodos.org.br' },
-};
+import { Institution, InstitutionDocument } from './schemas/institution.schema';
 
 @Injectable()
 export class InstitutionsService {
-  create(createInstitutionDto: CreateInstitutionDto) {
-    return createInstitutionDto;
+  constructor(
+    @InjectModel(Institution.name) private readonly institutionModel: Model<InstitutionDocument>,
+  ) {}
+
+  private toAppInstitution(institution: InstitutionDocument | any) {
+    return {
+      id: institution._id?.toString() ?? institution.id,
+      name: institution.displayName || institution.legalName,
+      category: institution.acceptedDonationTypes?.[0] ?? 'Outros',
+      city: institution.address?.city ?? 'São Paulo',
+      state: institution.address?.state ?? 'SP',
+      activeCampaigns: institution.stats?.campaignsCount ?? 0,
+      verified: institution.verification?.isVerified ?? false,
+      description: institution.description ?? 'Descrição indisponível.',
+    };
   }
 
-  findAll() {
-    return INSTITUTIONS;
+  private async ensureSeedData() {
+    const existingCount = await this.institutionModel.countDocuments().exec();
+
+    if (existingCount > 0) {
+      return;
+    }
+
+    await this.institutionModel.create([
+      {
+        legalName: 'Educação Viva',
+        displayName: 'Educação Viva',
+        cnpj: '00000000000100',
+        email: 'contato@educacaoviva.org.br',
+        description: 'Promovemos acesso à educação de qualidade para crianças em situação de vulnerabilidade.',
+        status: 'ACTIVE',
+        verification: { isVerified: true },
+        address: { city: 'São Paulo', state: 'SP' },
+        acceptedDonationTypes: ['MONEY'],
+        taxReceiptEnabled: true,
+      },
+      {
+        legalName: 'Lar Aconchego',
+        displayName: 'Lar Aconchego',
+        cnpj: '00000000000200',
+        email: 'contato@laraconchego.org.br',
+        description: 'Distribuímos cestas básicas e refeições para famílias em insegurança alimentar.',
+        status: 'ACTIVE',
+        verification: { isVerified: true },
+        address: { city: 'Curitiba', state: 'PR' },
+        acceptedDonationTypes: ['MONEY'],
+        taxReceiptEnabled: true,
+      },
+    ]);
   }
 
-  findOne(id: string) {
-    const base = INSTITUTIONS.find((institution) => institution.id === id);
+  async create(createInstitutionDto: CreateInstitutionDto) {
+    await this.ensureSeedData();
+    return this.institutionModel.create(createInstitutionDto);
+  }
 
-    if (!base) {
-      return { id, message: 'Instituição não encontrada.' };
+  async findAll() {
+    await this.ensureSeedData();
+    const institutions = await this.institutionModel.find().sort({ createdAt: -1 }).lean().exec();
+    return institutions.map((institution) => this.toAppInstitution(institution));
+  }
+
+  async findOne(id: string) {
+    await this.ensureSeedData();
+    const institution = await this.institutionModel.findById(id).lean().exec();
+
+    if (!institution) {
+      throw new NotFoundException(`Instituição ${id} não encontrada.`);
     }
 
     return {
-      ...base,
-      ...INSTITUTION_DETAILS[id],
-      campaigns: [
-        { id: '1', title: 'Material Escolar 2026', active: true },
-        { id: '2', title: 'Cestas de Inverno', active: true },
-      ].filter((campaign) => campaign.id !== '3' || id === 'inst-3'),
+      ...this.toAppInstitution(institution),
+      foundedYear: 2010,
+      email: institution.email,
+      website: institution.website ?? undefined,
+      campaigns: [],
     };
   }
 
   update(id: string, updateInstitutionDto: UpdateInstitutionDto) {
-    return {
-      id,
-      ...updateInstitutionDto,
-    };
+    return this.institutionModel.findByIdAndUpdate(id, updateInstitutionDto, { new: true }).exec();
   }
 
   remove(id: string) {
-    return { id };
+    return this.institutionModel.findByIdAndDelete(id).exec();
   }
 }

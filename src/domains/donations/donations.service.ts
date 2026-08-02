@@ -1,68 +1,134 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
 
+import { Campaign, CampaignDocument } from '../campaigns/schemas/campaign.schema';
+import { Institution, InstitutionDocument } from '../institutions/schemas/institution.schema';
+import { DonationDeliveryMode, DonationStatus, DonationType, DonationVisibility } from './models';
 import { CreateDonationDto } from './dto/create-donation.dto';
 import { UpdateDonationDto } from './dto/update-donation.dto';
-
-const DONATIONS = [
-  {
-    id: 'don-1',
-    campaignId: '1',
-    campaignTitle: 'Material Escolar 2026',
-    institutionName: 'Educação Viva',
-    amountCents: 8000,
-    amountFormatted: 'R$ 80,00',
-    status: 'completed',
-    createdAt: '2026-04-15T10:00:00Z',
-  },
-  {
-    id: 'don-2',
-    campaignId: '2',
-    campaignTitle: 'Cestas de Inverno',
-    institutionName: 'Lar Aconchego',
-    amountCents: 4500,
-    amountFormatted: 'R$ 45,00',
-    status: 'cancelled',
-    createdAt: '2026-04-01T14:30:00Z',
-  },
-];
+import { Donation, DonationDocument } from './schemas/donation.schema';
 
 @Injectable()
 export class DonationsService {
-  create(createDonationDto: CreateDonationDto) {
-    const donation = {
-      id: `don-${Date.now()}`,
-      campaignId: createDonationDto.campaignId,
-      campaignTitle: 'Campanha',
-      institutionName: 'Instituição',
-      amountCents: createDonationDto.amountCents,
-      amountFormatted: `R$ ${(createDonationDto.amountCents / 100).toFixed(2).replace('.', ',')}`,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
+  constructor(
+    @InjectModel(Donation.name) private readonly donationModel: Model<DonationDocument>,
+    @InjectModel(Campaign.name) private readonly campaignModel: Model<CampaignDocument>,
+    @InjectModel(Institution.name) private readonly institutionModel: Model<InstitutionDocument>,
+  ) {}
+
+  private formatCurrency(value: number) {
+    return `R$ ${(value / 100).toFixed(2).replace('.', ',')}`;
+  }
+
+  private async enrichDonation(donation: DonationDocument | any) {
+    const [campaign, institution] = await Promise.all([
+      this.campaignModel.findById(donation.campaignId).lean().exec(),
+      this.institutionModel.findById(donation.institutionId).lean().exec(),
+    ]);
+
+    return {
+      id: donation._id?.toString() ?? donation.id,
+      campaignId: donation.campaignId?.toString() ?? donation.campaignId,
+      campaignTitle: campaign?.title ?? 'Campanha',
+      institutionName: institution?.displayName || institution?.legalName || 'Instituição',
+      amountCents: donation.moneyDonation?.amount ? Math.round(donation.moneyDonation.amount * 100) : 0,
+      amountFormatted: this.formatCurrency(donation.moneyDonation?.amount ? Math.round(donation.moneyDonation.amount * 100) : 0),
+      status: donation.status?.toLowerCase() ?? 'pending',
+      createdAt: donation.createdAt?.toISOString() ?? new Date().toISOString(),
+    };
+  }
+
+  private async ensureSeedData() {
+    const existingCount = await this.donationModel.countDocuments().exec();
+
+    if (existingCount > 0) {
+      return;
+    }
+
+    const [campaign, institution] = await Promise.all([
+      this.campaignModel.findOne().lean().exec(),
+      this.institutionModel.findOne().lean().exec(),
+    ]);
+
+    if (!campaign || !institution) {
+      return;
+    }
+
+    await this.donationModel.create([
+      {
+        donorUserId: new Types.ObjectId(),
+        institutionId: institution._id,
+        campaignId: campaign._id,
+        type: DonationType.MONEY,
+        status: DonationStatus.PAID,
+        visibility: DonationVisibility.PUBLIC,
+        moneyDonation: { amount: 80, currency: 'BRL' },
+        deliveryMode: DonationDeliveryMode.INSTANT_ONLINE,
+        receiptEligible: true,
+      },
+    ]);
+  }
+
+  async create(createDonationDto: CreateDonationDto, donorUserId?: string) {
+    await this.ensureSeedData();
+
+    const toObjectId = (value?: string) => {
+      if (!value) {
+        return undefined;
+      }
+
+      try {
+        return new Types.ObjectId(value);
+      } catch {
+        return value;
+      }
     };
 
-    return { donation };
+    const donation = await this.donationModel.create({
+      donorUserId: donorUserId ? toObjectId(donorUserId) : new Types.ObjectId(),
+      institutionId: new Types.ObjectId(),
+      campaignId: createDonationDto.campaignId ? toObjectId(createDonationDto.campaignId) : undefined,
+      type: DonationType.MONEY,
+      status: DonationStatus.PENDING_PAYMENT,
+      visibility: DonationVisibility.PUBLIC,
+      moneyDonation: { amount: createDonationDto.amountCents / 100, currency: 'BRL' },
+      deliveryMode: DonationDeliveryMode.INSTANT_ONLINE,
+      receiptEligible: true,
+    });
+
+    return { donation: await this.enrichDonation(donation) };
   }
 
-  findAll() {
-    return DONATIONS;
+  async findAll() {
+    await this.ensureSeedData();
+    const donations = await this.donationModel.find().sort({ createdAt: -1 }).lean().exec();
+    return Promise.all(donations.map((donation) => this.enrichDonation(donation)));
   }
 
-  findMyDonations() {
-    return DONATIONS;
+  async findMyDonations(donorUserId?: string) {
+    await this.ensureSeedData();
+    const query = donorUserId ? { donorUserId: new Types.ObjectId(donorUserId) } : {};
+    const donations = await this.donationModel.find(query).sort({ createdAt: -1 }).lean().exec();
+    return Promise.all(donations.map((donation) => this.enrichDonation(donation)));
   }
 
-  findOne(id: string) {
-    return DONATIONS.find((donation) => donation.id === id) ?? { id };
+  async findOne(id: string) {
+    await this.ensureSeedData();
+    const donation = await this.donationModel.findById(id).lean().exec();
+
+    if (!donation) {
+      throw new NotFoundException(`Doação ${id} não encontrada.`);
+    }
+
+    return this.enrichDonation(donation);
   }
 
   update(id: string, updateDonationDto: UpdateDonationDto) {
-    return {
-      id,
-      ...updateDonationDto,
-    };
+    return this.donationModel.findByIdAndUpdate(id, updateDonationDto, { new: true }).exec();
   }
 
   remove(id: string) {
-    return { id };
+    return this.donationModel.findByIdAndDelete(id).exec();
   }
 }

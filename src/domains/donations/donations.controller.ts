@@ -8,6 +8,8 @@ import {
   Post,
 } from '@nestjs/common';
 
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
 import { CreateDonationDto } from './dto/create-donation.dto';
 import { UpdateDonationDto } from './dto/update-donation.dto';
 import { DonationsService } from './donations.service';
@@ -17,13 +19,16 @@ export class DonationsController {
   constructor(private readonly donationsService: DonationsService) {}
 
   @Post()
-  create(@Body() createDonationDto: CreateDonationDto) {
-    return this.donationsService.create(createDonationDto);
+  create(
+    @Body() createDonationDto: CreateDonationDto,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.donationsService.create(createDonationDto, user?.sub);
   }
 
   @Get('me')
-  findMyDonations() {
-    return this.donationsService.findMyDonations();
+  findMyDonations(@CurrentUser() user: AuthenticatedUser | undefined) {
+    return this.donationsService.findMyDonations(user?.sub);
   }
 
   @Get()
