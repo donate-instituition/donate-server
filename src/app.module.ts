@@ -1,10 +1,12 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { createRateLimitMiddleware } from './common/middleware/rate-limit.middleware';
+import { env } from './config/env';
 import { AuditLogsModule } from './domains/audit-logs/audit-logs.module';
 import { CampaignsModule } from './domains/campaigns/campaigns.module';
 import { CategoriesModule } from './domains/categories/categories.module';
@@ -26,7 +28,6 @@ import { ReportsModule } from './domains/reports/reports.module';
 import { TaxReceiptsModule } from './domains/tax-receipts/tax-receipts.module';
 import { TrackingEventsModule } from './domains/tracking-events/tracking-events.module';
 import { UsersModule } from './domains/users/users.module';
-import { env } from './config/env';
 
 @Module({
   imports: [
@@ -57,4 +58,33 @@ import { env } from './config/env';
   controllers: [AppController],
   providers: [AppService, AllExceptionsFilter],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(
+        createRateLimitMiddleware({
+          name: 'auth',
+          windowMs: env.authRateLimitWindowMs,
+          maxRequests: env.authRateLimitMaxRequests,
+          skipSuccessfulOptions: true,
+        }),
+      )
+      .forRoutes(
+        'auth/login',
+        'auth/register',
+        'auth/forgot-password',
+        'auth/refresh',
+      );
+
+    consumer
+      .apply(
+        createRateLimitMiddleware({
+          name: 'global',
+          windowMs: env.rateLimitWindowMs,
+          maxRequests: env.rateLimitMaxRequests,
+          skipSuccessfulOptions: true,
+        }),
+      )
+      .forRoutes('*');
+  }
+}

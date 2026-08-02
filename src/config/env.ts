@@ -32,9 +32,25 @@ const getOptionalNumberEnv = (key: string, fallback: number): number => {
 
 export const env = {
   serviceName: process.env.SERVICE_NAME?.trim() || 'donate-server',
-  serviceVersion: process.env.SERVICE_VERSION?.trim() || process.env.npm_package_version || '0.0.1',
-  mongodbUri: getRequiredEnv('MONGODB_URI', 'mongodb://127.0.0.1:27017/elodoar'),
+  serviceVersion:
+    process.env.SERVICE_VERSION?.trim() ||
+    process.env.npm_package_version ||
+    '0.0.1',
+  mongodbUri: getRequiredEnv(
+    'MONGODB_URI',
+    'mongodb://127.0.0.1:27017/elodoar',
+  ),
   jwtSecret: getRequiredEnv('JWT_SECRET', 'dev-secret'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN?.trim() || '1d',
   port: getOptionalNumberEnv('PORT', 3000),
+  rateLimitWindowMs: getOptionalNumberEnv('RATE_LIMIT_WINDOW_MS', 60_000),
+  rateLimitMaxRequests: getOptionalNumberEnv('RATE_LIMIT_MAX_REQUESTS', 120),
+  authRateLimitWindowMs: getOptionalNumberEnv(
+    'AUTH_RATE_LIMIT_WINDOW_MS',
+    60_000,
+  ),
+  authRateLimitMaxRequests: getOptionalNumberEnv(
+    'AUTH_RATE_LIMIT_MAX_REQUESTS',
+    10,
+  ),
 };
