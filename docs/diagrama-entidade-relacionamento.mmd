@@ -1,0 +1,327 @@
+erDiagram
+  USERS {
+    ObjectId _id_PK
+    string type
+    string role
+    string fullName
+    string email_UK
+    string phone
+    string cpf
+    string passwordHash
+    date birthDate
+    string profilePhotoUrl
+    string bio
+    string status
+    boolean isVerified
+    object settings
+    object stats
+    date createdAt
+    date updatedAt
+  }
+
+  INSTITUTIONS {
+    ObjectId _id_PK
+    string legalName
+    string displayName
+    string cnpj_UK
+    string email
+    string phone
+    string description
+    ObjectIdArray categoryIds_FK
+    string logoUrl
+    string coverPhotoUrl
+    string website
+    string status
+    object verification
+    object address
+    stringArray acceptedDonationTypes
+    string pixKey
+    boolean taxReceiptEnabled
+    object stats
+    date createdAt
+    date updatedAt
+  }
+
+  CATEGORIES {
+    ObjectId _id_PK
+    string type
+    string name
+    string slug
+    boolean isActive
+    date createdAt
+  }
+
+  INSTITUTION_STAFF_MEMBERSHIPS {
+    ObjectId _id_PK
+    ObjectId institutionId_FK
+    ObjectId userId_FK
+    string role
+    stringArray permissions
+    string status
+    ObjectId invitedByUserId_FK
+    date createdAt
+    date updatedAt
+  }
+
+  CAMPAIGNS {
+    ObjectId _id_PK
+    ObjectId institutionId_FK
+    ObjectId createdByUserId_FK
+    string title
+    string description
+    string bannerUrl
+    string status
+    stringArray donationTypes
+    objectArray acceptedItems
+    object goal
+    object progress
+    string visibility
+    date startAt
+    date endAt
+    object address
+    stringArray tags
+    object stats
+    date createdAt
+    date updatedAt
+  }
+
+  DONATIONS {
+    ObjectId _id_PK
+    ObjectId donorUserId_FK
+    ObjectId institutionId_FK
+    ObjectId campaignId_FK
+    string type
+    string status
+    string visibility
+    object moneyDonation
+    object itemDonation
+    string deliveryMode
+    date scheduledAt
+    string note
+    boolean receiptEligible
+    string proofPhotoUrl
+    date deliveredAt
+    date createdAt
+    date updatedAt
+  }
+
+  PAYMENTS {
+    ObjectId _id_PK
+    ObjectId donationId_FK
+    ObjectId donorUserId_FK
+    ObjectId institutionId_FK
+    string gateway
+    string gatewayTransactionId
+    string paymentMethod
+    number amount
+    string currency
+    string status
+    object pix
+    object gatewayPayload
+    date paidAt
+    date refundedAt
+    date createdAt
+    date updatedAt
+  }
+
+  DELIVERY_PROOFS {
+    ObjectId _id_PK
+    ObjectId donationId_FK
+    string photoUrl
+    string description
+    ObjectId confirmedByUserId_FK
+    date confirmedAt
+    object metadata
+    date createdAt
+  }
+
+  TAX_RECEIPTS {
+    ObjectId _id_PK
+    ObjectId donationId_FK
+    ObjectId donorUserId_FK
+    ObjectId institutionId_FK
+    string receiptNumber
+    string type
+    number amount
+    date issuedAt
+    string documentUrl
+    object metadata
+    date createdAt
+  }
+
+  DONATION_STATUS_HISTORY {
+    ObjectId _id_PK
+    ObjectId donationId_FK
+    string fromStatus
+    string toStatus
+    ObjectId changedByUserId_FK
+    string source
+    string note
+    date createdAt
+  }
+
+  TRACKING_EVENTS {
+    ObjectId _id_PK
+    ObjectId donationId_FK
+    string eventType
+    object location
+    string description
+    ObjectId actorUserId_FK
+    string photoUrl
+    date createdAt
+  }
+
+  POSTS {
+    ObjectId _id_PK
+    string authorType
+    ObjectId authorId_FK
+    ObjectId campaignId_FK
+    ObjectId institutionId_FK
+    string content
+    objectArray media
+    string visibility
+    object stats
+    date createdAt
+    date updatedAt
+  }
+
+  POST_COMMENTS {
+    ObjectId _id_PK
+    ObjectId postId_FK
+    ObjectId userId_FK
+    ObjectId parentCommentId_FK
+    string content
+    date createdAt
+    date updatedAt
+  }
+
+  POST_REACTIONS {
+    ObjectId _id_PK
+    ObjectId postId_FK
+    ObjectId userId_FK
+    string type
+    date createdAt
+  }
+
+  CONVERSATIONS {
+    ObjectId _id_PK
+    string type
+    ObjectIdArray participantIds_FK
+    ObjectId institutionId_FK
+    ObjectId campaignId_FK
+    date lastMessageAt
+    date createdAt
+    date updatedAt
+  }
+
+  MESSAGES {
+    ObjectId _id_PK
+    ObjectId conversationId_FK
+    ObjectId senderUserId_FK
+    string content
+    string messageType
+    objectArray attachments
+    objectArray readBy
+    date createdAt
+    date updatedAt
+  }
+
+  NOTIFICATIONS {
+    ObjectId _id_PK
+    ObjectId userId_FK
+    string type
+    string title
+    string body
+    object data
+    date readAt
+    date createdAt
+  }
+
+  FOLLOWS {
+    ObjectId _id_PK
+    ObjectId followerUserId_FK
+    string targetType
+    ObjectId targetId_FK
+    date createdAt
+  }
+
+  REPORTS {
+    ObjectId _id_PK
+    ObjectId reporterUserId_FK
+    string targetType
+    ObjectId targetId_FK
+    string reason
+    string description
+    string status
+    ObjectId reviewedByUserId_FK
+    date reviewedAt
+    date createdAt
+    date updatedAt
+  }
+
+  AUDIT_LOGS {
+    ObjectId _id_PK
+    ObjectId actorUserId_FK
+    string action
+    string targetType
+    ObjectId targetId_FK
+    object metadata
+    string ip
+    string userAgent
+    date createdAt
+  }
+
+  USERS ||--o{ INSTITUTION_STAFF_MEMBERSHIPS : userId_FK_to_users_PK
+  USERS ||--o{ INSTITUTION_STAFF_MEMBERSHIPS : invitedByUserId_FK_to_users_PK
+  INSTITUTIONS ||--o{ INSTITUTION_STAFF_MEMBERSHIPS : institutionId_FK_to_institutions_PK
+
+  CATEGORIES ||--o{ INSTITUTIONS : categoryIds_FK_to_categories_PK
+  INSTITUTIONS ||--o{ CAMPAIGNS : institutionId_FK_to_institutions_PK
+  USERS ||--o{ CAMPAIGNS : createdByUserId_FK_to_users_PK
+
+  USERS ||--o{ DONATIONS : donorUserId_FK_to_users_PK
+  INSTITUTIONS ||--o{ DONATIONS : institutionId_FK_to_institutions_PK
+  CAMPAIGNS ||--o{ DONATIONS : campaignId_FK_to_campaigns_PK
+
+  DONATIONS ||--o{ PAYMENTS : donationId_FK_to_donations_PK
+  USERS ||--o{ PAYMENTS : donorUserId_FK_to_users_PK
+  INSTITUTIONS ||--o{ PAYMENTS : institutionId_FK_to_institutions_PK
+
+  DONATIONS ||--o{ DELIVERY_PROOFS : donationId_FK_to_donations_PK
+  USERS ||--o{ DELIVERY_PROOFS : confirmedByUserId_FK_to_users_PK
+
+  DONATIONS ||--o{ TAX_RECEIPTS : donationId_FK_to_donations_PK
+  USERS ||--o{ TAX_RECEIPTS : donorUserId_FK_to_users_PK
+  INSTITUTIONS ||--o{ TAX_RECEIPTS : institutionId_FK_to_institutions_PK
+
+  DONATIONS ||--o{ DONATION_STATUS_HISTORY : donationId_FK_to_donations_PK
+  USERS ||--o{ DONATION_STATUS_HISTORY : changedByUserId_FK_to_users_PK
+
+  DONATIONS ||--o{ TRACKING_EVENTS : donationId_FK_to_donations_PK
+  USERS ||--o{ TRACKING_EVENTS : actorUserId_FK_to_users_PK
+
+  USERS ||--o{ POSTS : authorId_FK_to_users_PK
+  INSTITUTIONS ||--o{ POSTS : authorId_FK_to_institutions_PK
+  INSTITUTIONS ||--o{ POSTS : institutionId_FK_to_institutions_PK
+  CAMPAIGNS ||--o{ POSTS : campaignId_FK_to_campaigns_PK
+  POSTS ||--o{ POST_COMMENTS : postId_FK_to_posts_PK
+  USERS ||--o{ POST_COMMENTS : userId_FK_to_users_PK
+  POST_COMMENTS ||--o{ POST_COMMENTS : parentCommentId_FK_to_post_comments_PK
+  POSTS ||--o{ POST_REACTIONS : postId_FK_to_posts_PK
+  USERS ||--o{ POST_REACTIONS : userId_FK_to_users_PK
+
+  USERS }o--o{ CONVERSATIONS : participantIds_FK_to_users_PK
+  INSTITUTIONS ||--o{ CONVERSATIONS : institutionId_FK_to_institutions_PK
+  CAMPAIGNS ||--o{ CONVERSATIONS : campaignId_FK_to_campaigns_PK
+  CONVERSATIONS ||--o{ MESSAGES : conversationId_FK_to_conversations_PK
+  USERS ||--o{ MESSAGES : senderUserId_FK_to_users_PK
+  USERS ||--o{ MESSAGES : readBy_userId_FK_to_users_PK
+
+  USERS ||--o{ NOTIFICATIONS : userId_FK_to_users_PK
+  USERS ||--o{ FOLLOWS : followerUserId_FK_to_users_PK
+  INSTITUTIONS ||--o{ FOLLOWS : targetId_FK_to_institutions_PK
+  CAMPAIGNS ||--o{ FOLLOWS : targetId_FK_to_campaigns_PK
+
+  USERS ||--o{ REPORTS : reporterUserId_FK_to_users_PK
+  USERS ||--o{ REPORTS : reviewedByUserId_FK_to_users_PK
+  USERS ||--o{ AUDIT_LOGS : actorUserId_FK_to_users_PK

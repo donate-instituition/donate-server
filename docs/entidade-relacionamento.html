@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Documento Entidade-Relacionamento - Plataforma de Doacoes</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 16mm;
+      }
+
+      @page diagram {
+        size: A3 landscape;
+        margin: 10mm;
+      }
+
+      body {
+        color: #172033;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      h1 {
+        color: #0f3b57;
+        font-size: 24px;
+        margin: 0 0 4px;
+      }
+
+      h2 {
+        border-bottom: 1px solid #c9d6df;
+        color: #24536f;
+        font-size: 16px;
+        margin: 22px 0 8px;
+        padding-bottom: 4px;
+      }
+
+      p {
+        margin: 6px 0;
+      }
+
+      table {
+        border-collapse: collapse;
+        margin-top: 8px;
+        width: 100%;
+      }
+
+      th,
+      td {
+        border: 1px solid #c9d6df;
+        padding: 6px 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #eaf2f6;
+      }
+
+      code,
+      pre {
+        font-family: Consolas, "Liberation Mono", monospace;
+      }
+
+      pre {
+        background: #f5f8fa;
+        border: 1px solid #c9d6df;
+        font-size: 10px;
+        overflow-wrap: anywhere;
+        padding: 10px;
+        white-space: pre-wrap;
+      }
+
+      .meta {
+        color: #536675;
+        margin-bottom: 18px;
+      }
+
+      .note {
+        background: #f5f8fa;
+        border-left: 4px solid #2f7ea7;
+        padding: 8px 10px;
+      }
+
+      .diagram-page {
+        page: diagram;
+        page-break-before: always;
+      }
+
+      .diagram-frame {
+        background: #fff;
+        border: 1px solid #c9d6df;
+        padding: 6px;
+      }
+
+      .diagram-frame img {
+        display: block;
+        height: auto;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Documento Entidade-Relacionamento</h1>
+    <p class="meta">Plataforma Mobile de Doacoes - MongoDB/Mongoose</p>
+
+    <h2>Resumo</h2>
+    <p>
+      Este documento foi gerado a partir dos schemas Mongoose em
+      <code>src/domains/*/schemas</code>. O diagrama completo em Mermaid fica
+      em <code>docs/diagrama-entidade-relacionamento.mmd</code>.
+    </p>
+    <p class="note">
+      Como o projeto usa MongoDB, as relacoes sao mantidas por campos
+      <code>ObjectId</code>. Relacoes polimorficas dependem de campos como
+      <code>targetType</code> e <code>authorType</code>.
+    </p>
+
+    <section class="diagram-page">
+      <h2>Diagrama ER</h2>
+      <div class="diagram-frame">
+        <img
+          src="diagrama-entidade-relacionamento.svg"
+          alt="Diagrama entidade-relacionamento da plataforma de doacoes"
+        />
+      </div>
+    </section>
+
+    <h2>Collections principais</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Collection</th>
+          <th>Entidade</th>
+          <th>Campos relacionais principais</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>users</td><td>Usuario</td><td>Referenciado por doacoes, campanhas, mensagens, notificacoes, equipe, auditoria e relatorios.</td></tr>
+        <tr><td>institutions</td><td>Instituicao</td><td><code>categoryIds</code>, <code>verification.verifiedByUserId</code></td></tr>
+        <tr><td>categories</td><td>Categoria</td><td>Referenciada por <code>institutions.categoryIds</code>.</td></tr>
+        <tr><td>institution_staff_memberships</td><td>Equipe da instituicao</td><td><code>institutionId</code>, <code>userId</code>, <code>invitedByUserId</code></td></tr>
+        <tr><td>campaigns</td><td>Campanha</td><td><code>institutionId</code>, <code>createdByUserId</code></td></tr>
+        <tr><td>donations</td><td>Doacao</td><td><code>donorUserId</code>, <code>institutionId</code>, <code>campaignId</code></td></tr>
+        <tr><td>payments</td><td>Pagamento</td><td><code>donationId</code>, <code>donorUserId</code>, <code>institutionId</code></td></tr>
+        <tr><td>delivery_proofs</td><td>Comprovante de entrega</td><td><code>donationId</code>, <code>confirmedByUserId</code></td></tr>
+        <tr><td>tax_receipts</td><td>Recibo fiscal</td><td><code>donationId</code>, <code>donorUserId</code>, <code>institutionId</code></td></tr>
+        <tr><td>donation_status_history</td><td>Historico de status</td><td><code>donationId</code>, <code>changedByUserId</code></td></tr>
+        <tr><td>tracking_events</td><td>Evento de rastreio</td><td><code>donationId</code>, <code>actorUserId</code></td></tr>
+        <tr><td>posts</td><td>Postagem</td><td><code>authorId</code>, <code>campaignId</code>, <code>institutionId</code></td></tr>
+        <tr><td>post_comments</td><td>Comentario</td><td><code>postId</code>, <code>userId</code>, <code>parentCommentId</code></td></tr>
+        <tr><td>post_reactions</td><td>Reacao</td><td><code>postId</code>, <code>userId</code></td></tr>
+        <tr><td>conversations</td><td>Conversa</td><td><code>participantIds</code>, <code>institutionId</code>, <code>campaignId</code></td></tr>
+        <tr><td>messages</td><td>Mensagem</td><td><code>conversationId</code>, <code>senderUserId</code>, <code>readBy.userId</code></td></tr>
+        <tr><td>notifications</td><td>Notificacao</td><td><code>userId</code></td></tr>
+        <tr><td>follows</td><td>Seguimento</td><td><code>followerUserId</code>, <code>targetId</code> polimorfico.</td></tr>
+        <tr><td>reports</td><td>Denuncia</td><td><code>reporterUserId</code>, <code>reviewedByUserId</code>, <code>targetId</code> polimorfico.</td></tr>
+        <tr><td>audit_logs</td><td>Auditoria</td><td><code>actorUserId</code>, <code>targetId</code> polimorfico.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Relacionamentos</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Origem</th>
+          <th>Destino</th>
+          <th>Campo</th>
+          <th>Cardinalidade</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>users</td><td>institution_staff_memberships</td><td>userId, invitedByUserId</td><td>1:N</td></tr>
+        <tr><td>institutions</td><td>institution_staff_memberships</td><td>institutionId</td><td>1:N</td></tr>
+        <tr><td>categories</td><td>institutions</td><td>categoryIds</td><td>1:N</td></tr>
+        <tr><td>institutions</td><td>campaigns</td><td>institutionId</td><td>1:N</td></tr>
+        <tr><td>users</td><td>campaigns</td><td>createdByUserId</td><td>1:N</td></tr>
+        <tr><td>users</td><td>donations</td><td>donorUserId</td><td>1:N</td></tr>
+        <tr><td>institutions</td><td>donations</td><td>institutionId</td><td>1:N</td></tr>
+        <tr><td>campaigns</td><td>donations</td><td>campaignId</td><td>1:N opcional</td></tr>
+        <tr><td>donations</td><td>payments, delivery_proofs, tax_receipts, status_history, tracking_events</td><td>donationId</td><td>1:N</td></tr>
+        <tr><td>users</td><td>posts, comments, reactions, messages, notifications</td><td>authorId/userId/senderUserId</td><td>1:N</td></tr>
+        <tr><td>conversations</td><td>messages</td><td>conversationId</td><td>1:N</td></tr>
+        <tr><td>users</td><td>conversations</td><td>participantIds</td><td>N:N</td></tr>
+        <tr><td>users</td><td>follows</td><td>followerUserId</td><td>1:N</td></tr>
+        <tr><td>institutions/campaigns</td><td>follows</td><td>targetId + targetType</td><td>1:N polimorfico</td></tr>
+        <tr><td>users</td><td>reports/audit_logs</td><td>reporterUserId/reviewedByUserId/actorUserId</td><td>1:N</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Codigo Mermaid</h2>
+    <pre>erDiagram
+  USERS ||--o{ INSTITUTION_STAFF_MEMBERSHIPS : userId
+  INSTITUTIONS ||--o{ INSTITUTION_STAFF_MEMBERSHIPS : institutionId
+  CATEGORIES ||--o{ INSTITUTIONS : categoryIds
+  INSTITUTIONS ||--o{ CAMPAIGNS : institutionId
+  USERS ||--o{ CAMPAIGNS : createdByUserId
+  USERS ||--o{ DONATIONS : donorUserId
+  INSTITUTIONS ||--o{ DONATIONS : institutionId
+  CAMPAIGNS ||--o{ DONATIONS : campaignId
+  DONATIONS ||--o{ PAYMENTS : donationId
+  DONATIONS ||--o{ DELIVERY_PROOFS : donationId
+  DONATIONS ||--o{ TAX_RECEIPTS : donationId
+  DONATIONS ||--o{ DONATION_STATUS_HISTORY : donationId
+  DONATIONS ||--o{ TRACKING_EVENTS : donationId
+  POSTS ||--o{ POST_COMMENTS : postId
+  POSTS ||--o{ POST_REACTIONS : postId
+  CONVERSATIONS ||--o{ MESSAGES : conversationId
+  USERS ||--o{ NOTIFICATIONS : userId
+  USERS ||--o{ FOLLOWS : followerUserId
+  INSTITUTIONS ||--o{ FOLLOWS : targetId
+  CAMPAIGNS ||--o{ FOLLOWS : targetId</pre>
+  </body>
+</html>
