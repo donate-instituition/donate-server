@@ -1,10 +1,7 @@
 import { Prop, raw, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 
-import {
-  InstitutionDonationType,
-  InstitutionStatus,
-} from '../models';
+import { InstitutionDonationType, InstitutionStatus } from '../models';
 import type {
   InstitutionAddress,
   InstitutionStats,

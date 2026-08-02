@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 
 import { CreateInstitutionDto } from './dto/create-institution.dto';
 import { UpdateInstitutionDto } from './dto/update-institution.dto';
@@ -6,9 +14,7 @@ import { InstitutionsService } from './institutions.service';
 
 @Controller('institutions')
 export class InstitutionsController {
-  constructor(
-    private readonly institutionsService: InstitutionsService,
-  ) {}
+  constructor(private readonly institutionsService: InstitutionsService) {}
 
   @Post()
   create(@Body() createInstitutionDto: CreateInstitutionDto) {

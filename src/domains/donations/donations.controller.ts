@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 
 import { CreateDonationDto } from './dto/create-donation.dto';
 import { UpdateDonationDto } from './dto/update-donation.dto';
@@ -24,7 +32,10 @@ export class DonationsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateDonationDto: UpdateDonationDto) {
+  update(
+    @Param('id') id: string,
+    @Body() updateDonationDto: UpdateDonationDto,
+  ) {
     return this.donationsService.update(id, updateDonationDto);
   }
 

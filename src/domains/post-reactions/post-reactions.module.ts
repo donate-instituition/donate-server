@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
-import { PostReaction, PostReactionSchema } from './schemas/post-reaction.schema';
+import {
+  PostReaction,
+  PostReactionSchema,
+} from './schemas/post-reaction.schema';
 import { PostReactionsController } from './post-reactions.controller';
 import { PostReactionsService } from './post-reactions.service';
 

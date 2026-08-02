@@ -1,8 +1,4 @@
-import {
-  UserRole,
-  UserStatus,
-  UserType,
-} from '../models';
+import { UserRole, UserStatus, UserType } from '../models';
 import type { UserSettings, UserStats } from '../models';
 
 export class UpdateUserDto {

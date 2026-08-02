@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './auth/auth.module';
 import { AuditLogsModule } from './domains/audit-logs/audit-logs.module';
 import { CampaignsModule } from './domains/campaigns/campaigns.module';
 import { CategoriesModule } from './domains/categories/categories.module';
@@ -28,6 +29,7 @@ import { env } from './config/env';
 @Module({
   imports: [
     MongooseModule.forRoot(env.mongodbUri),
+    AuthModule,
     UsersModule,
     AuditLogsModule,
     InstitutionsModule,

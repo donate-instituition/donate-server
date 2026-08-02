@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 
 import { CreateTrackingEventDto } from './dto/create-tracking-event.dto';
 import { UpdateTrackingEventDto } from './dto/update-tracking-event.dto';

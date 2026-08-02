@@ -28,5 +28,7 @@ const getOptionalNumberEnv = (key: string, fallback: number): number => {
 
 export const env = {
   mongodbUri: getRequiredEnv('MONGODB_URI'),
+  jwtSecret: getRequiredEnv('JWT_SECRET'),
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN?.trim() || '1d',
   port: getOptionalNumberEnv('PORT', 3000),
 };

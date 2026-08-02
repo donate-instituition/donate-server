@@ -6,10 +6,7 @@ import {
   DonationType,
   DonationVisibility,
 } from '../models';
-import type {
-  DonationItemDonation,
-  DonationMoneyDonation,
-} from '../models';
+import type { DonationItemDonation, DonationMoneyDonation } from '../models';
 
 export class CreateDonationDto {
   donorUserId!: Types.ObjectId;

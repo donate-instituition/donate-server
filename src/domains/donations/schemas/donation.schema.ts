@@ -10,10 +10,7 @@ import {
   DonationType,
   DonationVisibility,
 } from '../models';
-import type {
-  DonationItemDonation,
-  DonationMoneyDonation,
-} from '../models';
+import type { DonationItemDonation, DonationMoneyDonation } from '../models';
 
 export type DonationDocument = HydratedDocument<Donation>;
 

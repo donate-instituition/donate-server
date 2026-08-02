@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 
 import { CreateDonationStatusHistoryDto } from './dto/create-donation-status-history.dto';
 import { UpdateDonationStatusHistoryDto } from './dto/update-donation-status-history.dto';
@@ -11,7 +19,9 @@ export class DonationStatusHistoryController {
   ) {}
 
   @Post()
-  create(@Body() createDonationStatusHistoryDto: CreateDonationStatusHistoryDto) {
+  create(
+    @Body() createDonationStatusHistoryDto: CreateDonationStatusHistoryDto,
+  ) {
     return this.donationStatusHistoryService.create(
       createDonationStatusHistoryDto,
     );

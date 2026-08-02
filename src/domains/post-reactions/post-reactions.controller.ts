@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 
 import { CreatePostReactionDto } from './dto/create-post-reaction.dto';
 import { UpdatePostReactionDto } from './dto/update-post-reaction.dto';
