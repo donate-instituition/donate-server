@@ -1,9 +1,13 @@
 import 'dotenv/config';
 
-const getRequiredEnv = (key: string): string => {
+const getRequiredEnv = (key: string, fallback?: string): string => {
   const value = process.env[key]?.trim();
 
   if (!value) {
+    if (fallback !== undefined) {
+      return fallback;
+    }
+
     throw new Error(`${key} environment variable is required`);
   }
 
@@ -27,8 +31,8 @@ const getOptionalNumberEnv = (key: string, fallback: number): number => {
 };
 
 export const env = {
-  mongodbUri: getRequiredEnv('MONGODB_URI'),
-  jwtSecret: getRequiredEnv('JWT_SECRET'),
+  mongodbUri: getRequiredEnv('MONGODB_URI', 'mongodb://127.0.0.1:27017/elodoar'),
+  jwtSecret: getRequiredEnv('JWT_SECRET', 'dev-secret'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN?.trim() || '1d',
   port: getOptionalNumberEnv('PORT', 3000),
 };

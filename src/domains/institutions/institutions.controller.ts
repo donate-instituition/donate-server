@@ -8,6 +8,7 @@ import {
   Post,
 } from '@nestjs/common';
 
+import { Public } from '../../auth/decorators/public.decorator';
 import { CreateInstitutionDto } from './dto/create-institution.dto';
 import { UpdateInstitutionDto } from './dto/update-institution.dto';
 import { InstitutionsService } from './institutions.service';
@@ -21,11 +22,13 @@ export class InstitutionsController {
     return this.institutionsService.create(createInstitutionDto);
   }
 
+  @Public()
   @Get()
   findAll() {
     return this.institutionsService.findAll();
   }
 
+  @Public()
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.institutionsService.findOne(id);

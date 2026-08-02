@@ -8,6 +8,7 @@ import {
   Post,
 } from '@nestjs/common';
 
+import { Public } from '../../auth/decorators/public.decorator';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
 import { CampaignsService } from './campaigns.service';
@@ -21,11 +22,13 @@ export class CampaignsController {
     return this.campaignsService.create(createCampaignDto);
   }
 
+  @Public()
   @Get()
   findAll() {
     return this.campaignsService.findAll();
   }
 
+  @Public()
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.campaignsService.findOne(id);

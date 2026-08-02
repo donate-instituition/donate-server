@@ -21,6 +21,11 @@ export class DonationsController {
     return this.donationsService.create(createDonationDto);
   }
 
+  @Get('me')
+  findMyDonations() {
+    return this.donationsService.findMyDonations();
+  }
+
   @Get()
   findAll() {
     return this.donationsService.findAll();

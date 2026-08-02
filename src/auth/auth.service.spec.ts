@@ -21,7 +21,10 @@ describe('AuthService', () => {
     };
     const user = {
       ...publicUser,
+      _id: userId,
       passwordHash,
+      fullName: 'Donor Example',
+      name: 'Donor Example',
     };
     const usersService = {
       findByEmail: jest.fn().mockResolvedValue(user),
@@ -38,7 +41,14 @@ describe('AuthService', () => {
       env.jwtSecret,
     ) as AuthenticatedUser;
 
-    expect(response.user).toEqual(publicUser);
+    expect(response.user).toEqual(
+      expect.objectContaining({
+        id: userId.toString(),
+        name: 'Donor Example',
+        email: 'donor@example.com',
+        role: 'donor',
+      }),
+    );
     expect(payload.sub).toBe(userId.toString());
     expect(payload.role).toBe(UserRole.DONOR);
     expect(payload.type).toBe(UserType.PERSON);

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 
@@ -17,9 +17,28 @@ export class UsersService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
   ) {}
 
-  create(createUserDto: CreateUserDto) {
-    void createUserDto;
-    return 'This action adds a new user';
+  async create(createUserDto: CreateUserDto) {
+    const normalizedEmail = createUserDto.email?.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      throw new ConflictException('Email is required');
+    }
+
+    const existingUser = await this.userModel.findOne({ email: normalizedEmail }).exec();
+
+    if (existingUser) {
+      throw new ConflictException('Email already registered');
+    }
+
+    return this.userModel.create({
+      type: createUserDto.type ?? 'PERSON',
+      role: createUserDto.role ?? 'DONOR',
+      fullName: createUserDto.fullName,
+      email: normalizedEmail,
+      passwordHash: createUserDto.passwordHash,
+      status: createUserDto.status ?? 'ACTIVE',
+      isVerified: createUserDto.isVerified ?? true,
+    });
   }
 
   findByEmail(email: string) {
@@ -34,11 +53,11 @@ export class UsersService {
   }
 
   findAll() {
-    return `This action returns all users`;
+    return this.userModel.find().exec();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} user`;
+  findOne(id: string) {
+    return this.userModel.findById(id).exec();
   }
 
   update(id: number, updateUserDto: UpdateUserDto) {
