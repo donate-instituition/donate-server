@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
@@ -15,10 +15,25 @@ export class DonationsService {
     @InjectModel(Donation.name) private readonly donationModel: Model<DonationDocument>,
     @InjectModel(Campaign.name) private readonly campaignModel: Model<CampaignDocument>,
     @InjectModel(Institution.name) private readonly institutionModel: Model<InstitutionDocument>,
-  ) {}
+  ) { }
 
   private formatCurrency(value: number) {
     return `R$ ${(value / 100).toFixed(2).replace('.', ',')}`;
+  }
+
+  private toAppStatus(status?: DonationStatus) {
+    const statusMap: Record<string, string> = {
+      CREATED: 'pending',
+      PENDING_PAYMENT: 'pending',
+      PAID: 'completed',
+      SCHEDULED_PICKUP: 'processing',
+      IN_TRANSIT: 'processing',
+      DELIVERED: 'completed',
+      CANCELED: 'cancelled',
+      FAILED: 'failed',
+    };
+
+    return status ? statusMap[status] ?? 'pending' : 'pending';
   }
 
   private async enrichDonation(donation: DonationDocument | any) {
@@ -34,7 +49,7 @@ export class DonationsService {
       institutionName: institution?.displayName || institution?.legalName || 'Instituição',
       amountCents: donation.moneyDonation?.amount ? Math.round(donation.moneyDonation.amount * 100) : 0,
       amountFormatted: this.formatCurrency(donation.moneyDonation?.amount ? Math.round(donation.moneyDonation.amount * 100) : 0),
-      status: donation.status?.toLowerCase() ?? 'pending',
+      status: this.toAppStatus(donation.status),
       createdAt: donation.createdAt?.toISOString() ?? new Date().toISOString(),
     };
   }
@@ -85,17 +100,45 @@ export class DonationsService {
       }
     };
 
+    const amountCents = createDonationDto.amountCents ?? (
+      createDonationDto.moneyDonation?.amount ? Math.round(createDonationDto.moneyDonation.amount * 100) : 0
+    );
+    const campaignId = createDonationDto.campaignId ? toObjectId(createDonationDto.campaignId.toString()) : undefined;
+
+    if (!campaignId) {
+      throw new BadRequestException('campaignId is required');
+    }
+
+    if (amountCents <= 0) {
+      throw new BadRequestException('amountCents must be greater than zero');
+    }
+
+    const campaign = await this.campaignModel.findById(campaignId).lean().exec();
+
+    if (!campaign) {
+      throw new NotFoundException(`Campanha ${createDonationDto.campaignId} não encontrada.`);
+    }
+
     const donation = await this.donationModel.create({
       donorUserId: donorUserId ? toObjectId(donorUserId) : new Types.ObjectId(),
-      institutionId: new Types.ObjectId(),
-      campaignId: createDonationDto.campaignId ? toObjectId(createDonationDto.campaignId) : undefined,
+      institutionId: campaign.institutionId,
+      campaignId,
       type: DonationType.MONEY,
       status: DonationStatus.PENDING_PAYMENT,
       visibility: DonationVisibility.PUBLIC,
-      moneyDonation: { amount: createDonationDto.amountCents / 100, currency: 'BRL' },
+      moneyDonation: { amount: amountCents / 100, currency: 'BRL' },
       deliveryMode: DonationDeliveryMode.INSTANT_ONLINE,
       receiptEligible: true,
     });
+
+    await this.campaignModel
+      .findByIdAndUpdate(campaignId, {
+        $inc: {
+          'progress.moneyRaised': amountCents / 100,
+          'stats.donationsCount': 1,
+        },
+      })
+      .exec();
 
     return { donation: await this.enrichDonation(donation) };
   }

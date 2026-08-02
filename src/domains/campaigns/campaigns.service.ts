@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
+import { InstitutionDonationType, InstitutionStatus } from '../institutions/models';
 import { Institution, InstitutionDocument } from '../institutions/schemas/institution.schema';
 import { CampaignStatus, CampaignDonationType, CampaignVisibility } from './models';
 import { Campaign, CampaignDocument } from './schemas/campaign.schema';
@@ -13,14 +14,26 @@ export class CampaignsService {
   constructor(
     @InjectModel(Campaign.name) private readonly campaignModel: Model<CampaignDocument>,
     @InjectModel(Institution.name) private readonly institutionModel: Model<InstitutionDocument>,
-  ) {}
+  ) { }
 
   private formatCurrency(value: number) {
     return `R$ ${(value / 100).toFixed(2).replace('.', ',')}`;
   }
 
+  private toAppCategory(category?: string) {
+    const categoryMap: Record<string, string> = {
+      FOOD: 'Alimentação',
+      CLOTHES: 'Outros',
+      HYGIENE: 'Saúde',
+      TOYS: 'Outros',
+      OTHER: 'Outros',
+    };
+
+    return category ? categoryMap[category] ?? 'Outros' : 'Outros';
+  }
+
   private mapCategory(campaign: CampaignDocument) {
-    return campaign?.acceptedItems?.[0]?.category?.toString() ?? 'Outros';
+    return this.toAppCategory(campaign?.acceptedItems?.[0]?.category?.toString());
   }
 
   private toAppCampaign(campaign: CampaignDocument | any) {
@@ -62,10 +75,10 @@ export class CampaignsService {
           cnpj: '00000000000100',
           email: 'contato@educacaoviva.org.br',
           description: 'Promovemos acesso à educação de qualidade para crianças em situação de vulnerabilidade.',
-          status: 'ACTIVE',
+          status: InstitutionStatus.ACTIVE,
           verification: { isVerified: true },
           address: { city: 'São Paulo', state: 'SP' },
-          acceptedDonationTypes: ['MONEY'],
+          acceptedDonationTypes: [InstitutionDonationType.MONEY],
           taxReceiptEnabled: true,
         },
         {
@@ -74,10 +87,10 @@ export class CampaignsService {
           cnpj: '00000000000200',
           email: 'contato@laraconchego.org.br',
           description: 'Distribuímos cestas básicas e refeições para famílias em insegurança alimentar.',
-          status: 'ACTIVE',
+          status: InstitutionStatus.ACTIVE,
           verification: { isVerified: true },
           address: { city: 'Curitiba', state: 'PR' },
-          acceptedDonationTypes: ['MONEY'],
+          acceptedDonationTypes: [InstitutionDonationType.MONEY],
           taxReceiptEnabled: true,
         },
       ]);

@@ -15,7 +15,7 @@ import { CampaignsService } from './campaigns.service';
 
 @Controller('campaigns')
 export class CampaignsController {
-  constructor(private readonly campaignsService: CampaignsService) {}
+  constructor(private readonly campaignsService: CampaignsService) { }
 
   @Post()
   create(@Body() createCampaignDto: CreateCampaignDto) {

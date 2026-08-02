@@ -8,6 +8,8 @@ import {
   Post,
 } from '@nestjs/common';
 
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
@@ -24,6 +26,11 @@ export class PostsController {
   @Get()
   findAll() {
     return this.postsService.findAll();
+  }
+
+  @Get('feed')
+  feed(@CurrentUser() user: AuthenticatedUser | undefined) {
+    return this.postsService.feed(user?.sub);
   }
 
   @Get(':id')

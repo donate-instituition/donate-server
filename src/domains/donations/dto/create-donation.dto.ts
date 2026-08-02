@@ -1,5 +1,3 @@
-import { Types } from 'mongoose';
-
 import {
   DonationDeliveryMode,
   DonationStatus,
@@ -9,13 +7,11 @@ import {
 import type { DonationItemDonation, DonationMoneyDonation } from '../models';
 
 export class CreateDonationDto {
-  donorUserId!: Types.ObjectId;
+  amountCents?: number;
 
-  institutionId!: Types.ObjectId;
+  campaignId?: string;
 
-  campaignId?: Types.ObjectId;
-
-  type!: DonationType;
+  type?: DonationType;
 
   status?: DonationStatus;
 
@@ -25,7 +21,7 @@ export class CreateDonationDto {
 
   itemDonation?: DonationItemDonation;
 
-  deliveryMode!: DonationDeliveryMode;
+  deliveryMode?: DonationDeliveryMode;
 
   scheduledAt?: Date;
 

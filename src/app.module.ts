@@ -4,6 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AuditLogsModule } from './domains/audit-logs/audit-logs.module';
 import { CampaignsModule } from './domains/campaigns/campaigns.module';
 import { CategoriesModule } from './domains/categories/categories.module';
@@ -11,6 +12,7 @@ import { ConversationsModule } from './domains/conversations/conversations.modul
 import { DeliveryProofsModule } from './domains/delivery-proofs/delivery-proofs.module';
 import { DonationStatusHistoryModule } from './domains/donation-status-history/donation-status-history.module';
 import { DonationsModule } from './domains/donations/donations.module';
+import { ErrorLogsModule } from './domains/error-logs/error-logs.module';
 import { FollowsModule } from './domains/follows/follows.module';
 import { InstitutionStaffMembershipsModule } from './domains/institution-staff-memberships/institution-staff-memberships.module';
 import { InstitutionsModule } from './domains/institutions/institutions.module';
@@ -39,6 +41,7 @@ import { env } from './config/env';
     ConversationsModule,
     DeliveryProofsModule,
     DonationsModule,
+    ErrorLogsModule,
     DonationStatusHistoryModule,
     FollowsModule,
     MessagesModule,
@@ -52,6 +55,6 @@ import { env } from './config/env';
     TrackingEventsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, AllExceptionsFilter],
 })
 export class AppModule {}

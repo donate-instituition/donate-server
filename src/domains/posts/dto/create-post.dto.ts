@@ -1,16 +1,14 @@
-import { Types } from 'mongoose';
-
 import { PostAuthorType, PostVisibility } from '../models';
 import type { PostMedia, PostStats } from '../models';
 
 export class CreatePostDto {
   authorType!: PostAuthorType;
 
-  authorId!: Types.ObjectId;
+  authorId?: string;
 
-  campaignId?: Types.ObjectId;
+  campaignId?: string;
 
-  institutionId?: Types.ObjectId;
+  institutionId?: string;
 
   content!: string;
 
