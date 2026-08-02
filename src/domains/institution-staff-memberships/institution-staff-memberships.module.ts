@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
+import { User, UserSchema } from '../users/schemas/user.schema';
 import {
   InstitutionStaffMembership,
   InstitutionStaffMembershipSchema,
@@ -15,6 +16,7 @@ import { InstitutionStaffMembershipsService } from './institution-staff-membersh
         name: InstitutionStaffMembership.name,
         schema: InstitutionStaffMembershipSchema,
       },
+      { name: User.name, schema: UserSchema },
     ]),
   ],
   controllers: [InstitutionStaffMembershipsController],

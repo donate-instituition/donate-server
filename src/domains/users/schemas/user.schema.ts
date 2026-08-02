@@ -29,10 +29,64 @@ export class User {
 
   @Prop({
     required: true,
-    enum: UserRole,
-    type: String,
+    type: [
+      raw({
+        name: {
+          type: String,
+          enum: UserRole,
+          required: true,
+        },
+        grantedAt: {
+          type: Date,
+          required: true,
+          default: Date.now,
+        },
+        grantedBy: {
+          type: raw({
+            source: {
+              type: String,
+              enum: ['SYSTEM', 'USER'],
+              required: true,
+              default: 'SYSTEM',
+            },
+            label: {
+              type: String,
+              required: true,
+              default: 'sistema',
+            },
+            userId: {
+              type: Types.ObjectId,
+              ref: 'User',
+            },
+          }),
+          required: true,
+          default: {
+            source: 'SYSTEM',
+            label: 'sistema',
+          },
+        },
+      }),
+    ],
+    default: () => [
+      {
+        name: UserRole.DONOR,
+        grantedAt: new Date(),
+        grantedBy: {
+          source: 'SYSTEM',
+          label: 'sistema',
+        },
+      },
+    ],
   })
-  role!: UserRole;
+  roles!: Array<{
+    name: UserRole;
+    grantedAt: Date;
+    grantedBy: {
+      source: 'SYSTEM' | 'USER';
+      label: string;
+      userId?: Types.ObjectId;
+    };
+  }>;
 
   @Prop({ required: true, trim: true })
   fullName!: string;
@@ -84,6 +138,10 @@ export class User {
         type: String,
         enum: UserAllowMessagesFrom,
         default: UserAllowMessagesFrom.EVERYONE,
+      },
+      preferredRole: {
+        type: String,
+        enum: UserRole,
       },
       notifications: {
         type: {

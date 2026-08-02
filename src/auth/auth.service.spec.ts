@@ -15,9 +15,18 @@ describe('AuthService', () => {
     const publicUser = {
       _id: userId,
       email: 'donor@example.com',
-      role: UserRole.DONOR,
       type: UserType.PERSON,
       status: UserStatus.ACTIVE,
+      roles: [
+        {
+          name: UserRole.DONOR,
+          grantedAt: new Date('2026-08-02T00:00:00.000Z'),
+          grantedBy: {
+            source: 'SYSTEM',
+            label: 'sistema',
+          },
+        },
+      ],
     };
     const user = {
       ...publicUser,
@@ -30,7 +39,13 @@ describe('AuthService', () => {
       findByEmail: jest.fn().mockResolvedValue(user),
       toPublicUser: jest.fn().mockReturnValue(publicUser),
     } as unknown as UsersService;
-    const authService = new AuthService(usersService);
+    const refreshTokenSessionModel = {
+      create: jest.fn().mockResolvedValue({}),
+      find: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }) }),
+      findByIdAndUpdate: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({}) }),
+      updateMany: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({}) }),
+    };
+    const authService = new AuthService(usersService, refreshTokenSessionModel as never);
 
     const response = await authService.login({
       email: 'donor@example.com',
@@ -46,11 +61,19 @@ describe('AuthService', () => {
         id: userId.toString(),
         name: 'Donor Example',
         email: 'donor@example.com',
-        role: 'donor',
+        roles: [
+          expect.objectContaining({
+            name: 'donor',
+            grantedBy: {
+              source: 'SYSTEM',
+              label: 'sistema',
+            },
+          }),
+        ],
       }),
     );
     expect(payload.sub).toBe(userId.toString());
-    expect(payload.role).toBe(UserRole.DONOR);
+    expect(payload.roles).toEqual([UserRole.DONOR]);
     expect(payload.type).toBe(UserType.PERSON);
     expect(payload.status).toBe(UserStatus.ACTIVE);
   });

@@ -1,10 +1,11 @@
 import { UserRole, UserStatus, UserType } from '../models';
+import type { UserRoleGrantInput } from './create-user.dto';
 import type { UserSettings, UserStats } from '../models';
 
 export class UpdateUserDto {
   type?: UserType;
 
-  role?: UserRole;
+  roles?: Array<UserRole | UserRoleGrantInput>;
 
   fullName?: string;
 

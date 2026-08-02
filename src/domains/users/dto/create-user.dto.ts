@@ -1,10 +1,22 @@
+import { Types } from 'mongoose';
+
 import { UserRole, UserStatus, UserType } from '../models';
 import type { UserSettings, UserStats } from '../models';
+
+export type UserRoleGrantInput = {
+  name: UserRole;
+  grantedAt?: Date;
+  grantedBy?: {
+    source: 'SYSTEM' | 'USER';
+    label: string;
+    userId?: Types.ObjectId;
+  };
+};
 
 export class CreateUserDto {
   type?: UserType;
 
-  role!: UserRole;
+  roles?: Array<UserRole | UserRoleGrantInput>;
 
   fullName!: string;
 

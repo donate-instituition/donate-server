@@ -1,14 +1,34 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { MongooseModule } from '@nestjs/mongoose';
 
+import {
+  InstitutionStaffMembership,
+  InstitutionStaffMembershipSchema,
+} from '../domains/institution-staff-memberships/schemas/institution-staff-membership.schema';
+import {
+  Institution,
+  InstitutionSchema,
+} from '../domains/institutions/schemas/institution.schema';
 import { UsersModule } from '../domains/users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
+import {
+  RefreshTokenSession,
+  RefreshTokenSessionSchema,
+} from './schemas/refresh-token-session.schema';
 
 @Module({
-  imports: [UsersModule],
+  imports: [
+    UsersModule,
+    MongooseModule.forFeature([
+      { name: RefreshTokenSession.name, schema: RefreshTokenSessionSchema },
+      { name: Institution.name, schema: InstitutionSchema },
+      { name: InstitutionStaffMembership.name, schema: InstitutionStaffMembershipSchema },
+    ]),
+  ],
   controllers: [AuthController],
   providers: [
     AuthService,
@@ -23,4 +43,4 @@ import { RolesGuard } from './guards/roles.guard';
   ],
   exports: [AuthService],
 })
-export class AuthModule {}
+export class AuthModule { }

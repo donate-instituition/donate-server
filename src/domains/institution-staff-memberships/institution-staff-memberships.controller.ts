@@ -8,6 +8,11 @@ import {
   Post,
 } from '@nestjs/common';
 
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import { Roles } from '../../auth/decorators/roles.decorator';
+import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
+import { UserRole } from '../users/models';
+import { CreateInstitutionStaffUserDto } from './dto/create-institution-staff-user.dto';
 import { CreateInstitutionStaffMembershipDto } from './dto/create-institution-staff-membership.dto';
 import { UpdateInstitutionStaffMembershipDto } from './dto/update-institution-staff-membership.dto';
 import { InstitutionStaffMembershipsService } from './institution-staff-memberships.service';
@@ -17,6 +22,18 @@ export class InstitutionStaffMembershipsController {
   constructor(
     private readonly institutionStaffMembershipsService: InstitutionStaffMembershipsService,
   ) {}
+
+  @Roles(UserRole.INSTITUTION_STAFF, UserRole.PLATFORM_ADMIN)
+  @Post('staff-users')
+  createStaffUser(
+    @Body() createInstitutionStaffUserDto: CreateInstitutionStaffUserDto,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.institutionStaffMembershipsService.createStaffUser(
+      createInstitutionStaffUserDto,
+      user,
+    );
+  }
 
   @Post()
   create(
