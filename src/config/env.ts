@@ -31,6 +31,8 @@ const getOptionalNumberEnv = (key: string, fallback: number): number => {
 };
 
 export const env = {
+  serviceName: process.env.SERVICE_NAME?.trim() || 'donate-server',
+  serviceVersion: process.env.SERVICE_VERSION?.trim() || process.env.npm_package_version || '0.0.1',
   mongodbUri: getRequiredEnv('MONGODB_URI', 'mongodb://127.0.0.1:27017/elodoar'),
   jwtSecret: getRequiredEnv('JWT_SECRET', 'dev-secret'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN?.trim() || '1d',

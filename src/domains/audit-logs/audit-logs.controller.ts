@@ -8,6 +8,8 @@ import {
   Post,
 } from '@nestjs/common';
 
+import { Roles } from '../../auth/decorators/roles.decorator';
+import { UserRole } from '../users/models';
 import { CreateAuditLogDto } from './dto/create-audit-log.dto';
 import { UpdateAuditLogDto } from './dto/update-audit-log.dto';
 import { AuditLogsService } from './audit-logs.service';
@@ -22,6 +24,7 @@ export class AuditLogsController {
   }
 
   @Get()
+  @Roles(UserRole.PLATFORM_ADMIN)
   findAll() {
     return this.auditLogsService.findAll();
   }
