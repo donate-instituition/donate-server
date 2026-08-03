@@ -1,3 +1,5 @@
+import type { InstitutionLocation } from '../../../institutions/models';
+
 export interface CampaignAddress {
   sameAsInstitution?: boolean;
   street?: string;
@@ -7,4 +9,5 @@ export interface CampaignAddress {
   state?: string;
   zipCode?: string;
   country?: string;
+  location?: InstitutionLocation;
 }

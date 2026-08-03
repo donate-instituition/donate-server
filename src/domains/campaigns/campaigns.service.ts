@@ -36,16 +36,40 @@ export class CampaignsService {
     return this.toAppCategory(campaign?.acceptedItems?.[0]?.category?.toString());
   }
 
-  private toAppCampaign(campaign: CampaignDocument | any) {
+  private toAppLocation(location?: { coordinates?: unknown }) {
+    const coordinates = location?.coordinates;
+
+    if (!Array.isArray(coordinates) || coordinates.length < 2) {
+      return undefined;
+    }
+
+    const [longitude, latitude] = coordinates.map(Number);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return undefined;
+    }
+
+    return { latitude, longitude };
+  }
+
+  private resolveCampaignLocation(campaign: CampaignDocument | any, institution?: InstitutionDocument | any) {
+    return (
+      this.toAppLocation(campaign?.address?.location) ??
+      this.toAppLocation(institution?.address?.location)
+    );
+  }
+
+  private toAppCampaign(campaign: CampaignDocument | any, institution?: InstitutionDocument | any) {
     const goalCents = Number(campaign?.goal?.moneyTarget ?? 0) * 100;
     const raisedCents = Number(campaign?.progress?.moneyRaised ?? 0) * 100;
     const progress = goalCents > 0 ? Math.min(100, Math.round((raisedCents / goalCents) * 100)) : 0;
     const active = campaign?.status === CampaignStatus.PUBLISHED && (!campaign?.endAt || new Date(campaign.endAt) >= new Date());
+    const location = this.resolveCampaignLocation(campaign, institution);
 
     return {
       id: campaign._id?.toString() ?? campaign.id,
       title: campaign.title,
-      institution: campaign.institutionName ?? 'Instituição',
+      institution: institution?.displayName ?? institution?.legalName ?? campaign.institutionName ?? 'Instituição',
       institutionId: campaign.institutionId?.toString() ?? '',
       category: this.mapCategory(campaign),
       goalFormatted: this.formatCurrency(goalCents),
@@ -55,6 +79,7 @@ export class CampaignsService {
       progress,
       active,
       endsAt: campaign.endAt ? new Date(campaign.endAt).toISOString().slice(0, 10) : undefined,
+      location,
     };
   }
 
@@ -77,7 +102,11 @@ export class CampaignsService {
           description: 'Promovemos acesso à educação de qualidade para crianças em situação de vulnerabilidade.',
           status: InstitutionStatus.ACTIVE,
           verification: { isVerified: true },
-          address: { city: 'São Paulo', state: 'SP' },
+          address: {
+            city: 'São Paulo',
+            state: 'SP',
+            location: { type: 'Point', coordinates: [-46.6333, -23.5505] },
+          },
           acceptedDonationTypes: [InstitutionDonationType.MONEY],
           taxReceiptEnabled: true,
         },
@@ -89,7 +118,11 @@ export class CampaignsService {
           description: 'Distribuímos cestas básicas e refeições para famílias em insegurança alimentar.',
           status: InstitutionStatus.ACTIVE,
           verification: { isVerified: true },
-          address: { city: 'Curitiba', state: 'PR' },
+          address: {
+            city: 'Curitiba',
+            state: 'PR',
+            location: { type: 'Point', coordinates: [-49.2733, -25.4284] },
+          },
           acceptedDonationTypes: [InstitutionDonationType.MONEY],
           taxReceiptEnabled: true,
         },
@@ -145,12 +178,11 @@ export class CampaignsService {
       .find({ _id: { $in: institutionIds } })
       .lean()
       .exec();
-    const institutionNameMap = new Map(institutions.map((institution) => [institution._id.toString(), institution.displayName || institution.legalName]));
+    const institutionMap = new Map(institutions.map((institution) => [institution._id.toString(), institution]));
 
-    return campaigns.map((campaign) => ({
-      ...this.toAppCampaign(campaign),
-      institution: institutionNameMap.get(campaign.institutionId?.toString() ?? '') ?? 'Instituição',
-    }));
+    return campaigns.map((campaign) =>
+      this.toAppCampaign(campaign, institutionMap.get(campaign.institutionId?.toString() ?? '')),
+    );
   }
 
   async findOne(id: string) {
@@ -164,11 +196,10 @@ export class CampaignsService {
     const institution = await this.institutionModel.findById(campaign.institutionId).lean().exec();
 
     return {
-      ...this.toAppCampaign(campaign),
+      ...this.toAppCampaign(campaign, institution),
       description: campaign.description ?? 'Descrição da campanha indisponível.',
       donorsCount: campaign.stats?.donationsCount ?? 0,
       itemsNeeded: campaign.acceptedItems?.map((item: any) => item.name) ?? [],
-      institution: institution?.displayName ?? institution?.legalName ?? 'Instituição',
     };
   }
 

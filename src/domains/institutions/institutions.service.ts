@@ -38,11 +38,35 @@ export class InstitutionsService {
     return this.toAppCategory(campaign?.acceptedItems?.[0]?.category?.toString());
   }
 
-  private toAppCampaign(campaign: CampaignDocument | any, institutionName: string) {
+  private toAppLocation(location?: { coordinates?: unknown }) {
+    const coordinates = location?.coordinates;
+
+    if (!Array.isArray(coordinates) || coordinates.length < 2) {
+      return undefined;
+    }
+
+    const [longitude, latitude] = coordinates.map(Number);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return undefined;
+    }
+
+    return { latitude, longitude };
+  }
+
+  private resolveCampaignLocation(campaign: CampaignDocument | any, institution: InstitutionDocument | any) {
+    return (
+      this.toAppLocation(campaign?.address?.location) ??
+      this.toAppLocation(institution?.address?.location)
+    );
+  }
+
+  private toAppCampaign(campaign: CampaignDocument | any, institution: InstitutionDocument | any) {
     const goalCents = Number(campaign?.goal?.moneyTarget ?? 0) * 100;
     const raisedCents = Number(campaign?.progress?.moneyRaised ?? 0) * 100;
     const progress = goalCents > 0 ? Math.min(100, Math.round((raisedCents / goalCents) * 100)) : 0;
     const active = campaign?.status === CampaignStatus.PUBLISHED && (!campaign?.endAt || new Date(campaign.endAt) >= new Date());
+    const institutionName = institution?.displayName || institution?.legalName || 'Instituição';
 
     return {
       id: campaign._id?.toString() ?? campaign.id,
@@ -57,10 +81,13 @@ export class InstitutionsService {
       progress,
       active,
       endsAt: campaign.endAt ? new Date(campaign.endAt).toISOString().slice(0, 10) : undefined,
+      location: this.resolveCampaignLocation(campaign, institution),
     };
   }
 
   private toAppInstitution(institution: InstitutionDocument | any) {
+    const location = this.toAppLocation(institution.address?.location);
+
     return {
       id: institution._id?.toString() ?? institution.id,
       name: institution.displayName || institution.legalName,
@@ -70,6 +97,7 @@ export class InstitutionsService {
       activeCampaigns: institution.stats?.campaignsCount ?? 0,
       verified: institution.verification?.isVerified ?? false,
       description: institution.description ?? 'Descrição indisponível.',
+      location,
     };
   }
 
@@ -89,7 +117,11 @@ export class InstitutionsService {
         description: 'Promovemos acesso à educação de qualidade para crianças em situação de vulnerabilidade.',
         status: InstitutionStatus.ACTIVE,
         verification: { isVerified: true },
-        address: { city: 'São Paulo', state: 'SP' },
+        address: {
+          city: 'São Paulo',
+          state: 'SP',
+          location: { type: 'Point', coordinates: [-46.6333, -23.5505] },
+        },
         acceptedDonationTypes: [InstitutionDonationType.MONEY],
         taxReceiptEnabled: true,
       },
@@ -101,7 +133,11 @@ export class InstitutionsService {
         description: 'Distribuímos cestas básicas e refeições para famílias em insegurança alimentar.',
         status: InstitutionStatus.ACTIVE,
         verification: { isVerified: true },
-        address: { city: 'Curitiba', state: 'PR' },
+        address: {
+          city: 'Curitiba',
+          state: 'PR',
+          location: { type: 'Point', coordinates: [-49.2733, -25.4284] },
+        },
         acceptedDonationTypes: [InstitutionDonationType.MONEY],
         taxReceiptEnabled: true,
       },
@@ -164,7 +200,6 @@ export class InstitutionsService {
     }
 
     const campaigns = await this.campaignModel.find({ institutionId: institution._id }).sort({ createdAt: -1 }).lean().exec();
-    const institutionName = institution.displayName || institution.legalName;
 
     return {
       ...this.toAppInstitution(institution),
@@ -172,7 +207,7 @@ export class InstitutionsService {
       email: institution.email,
       website: institution.website ?? undefined,
       activeCampaigns: campaigns.filter((campaign) => campaign.status === CampaignStatus.PUBLISHED).length,
-      campaigns: campaigns.map((campaign) => this.toAppCampaign(campaign, institutionName)),
+      campaigns: campaigns.map((campaign) => this.toAppCampaign(campaign, institution)),
     };
   }
 
