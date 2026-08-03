@@ -68,4 +68,6 @@ export const env = {
   emailSupportPhone: process.env.EMAIL_SUPPORT_PHONE?.trim() || '',
   rabbitmqUrl: process.env.RABBITMQ_URL?.trim() || '',
   rabbitmqExchange: process.env.RABBITMQ_EXCHANGE?.trim() || 'donate.jobs',
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY?.trim() || '',
+  stripeCurrency: process.env.STRIPE_CURRENCY?.trim().toLowerCase() || 'brl',
 };
