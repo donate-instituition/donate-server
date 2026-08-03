@@ -42,6 +42,12 @@ export class CreateUserDto {
 
   isVerified?: boolean;
 
+  termsAccepted?: boolean;
+
+  acceptedTermsVersion?: string;
+
+  termsAcceptedAt?: Date;
+
   settings?: UserSettings;
 
   stats?: UserStats;

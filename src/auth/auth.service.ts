@@ -176,6 +176,9 @@ export class AuthService implements OnModuleInit {
     roles?: Array<string | { name: string; grantedAt?: Date; grantedBy?: unknown }>;
     settings?: { preferredRole?: string };
     passwordChangeRequired?: boolean;
+    termsAccepted?: boolean;
+    acceptedTermsVersion?: string;
+    termsAcceptedAt?: Date;
   }) {
     const roles = this.toSessionRoleGrants(user);
     const preferredRole = user.settings?.preferredRole
@@ -189,6 +192,9 @@ export class AuthService implements OnModuleInit {
       roles,
       preferredRole: roles.some((role) => role.name === preferredRole) ? preferredRole : undefined,
       passwordChangeRequired: Boolean(user.passwordChangeRequired),
+      termsAccepted: Boolean(user.termsAccepted),
+      acceptedTermsVersion: user.acceptedTermsVersion,
+      termsAcceptedAt: user.termsAcceptedAt?.toISOString?.(),
     };
   }
 
@@ -526,6 +532,8 @@ export class AuthService implements OnModuleInit {
         accountType === 'INSTITUTION'
           ? UserStatus.ACTIVE
           : UserStatus.PENDING_VERIFICATION,
+      termsAccepted: true,
+      termsAcceptedAt: new Date(),
     });
 
     try {

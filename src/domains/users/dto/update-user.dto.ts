@@ -31,6 +31,12 @@ export class UpdateUserDto {
 
   isVerified?: boolean;
 
+  termsAccepted?: boolean;
+
+  acceptedTermsVersion?: string | null;
+
+  termsAcceptedAt?: Date | null;
+
   settings?: UserSettings;
 
   stats?: UserStats;

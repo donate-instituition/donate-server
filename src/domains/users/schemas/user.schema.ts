@@ -134,6 +134,15 @@ export class User {
   @Prop({ required: true, default: false })
   isVerified!: boolean;
 
+  @Prop({ required: true, default: false })
+  termsAccepted!: boolean;
+
+  @Prop({ trim: true })
+  acceptedTermsVersion?: string;
+
+  @Prop()
+  termsAcceptedAt?: Date;
+
   @Prop({
     type: raw({
       privateProfile: {

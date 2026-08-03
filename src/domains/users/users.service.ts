@@ -190,6 +190,9 @@ export class UsersService implements OnModuleInit {
       activationTokenVersion: createUserDto.activationTokenVersion,
       status: createUserDto.status ?? UserStatus.ACTIVE,
       isVerified: createUserDto.isVerified ?? true,
+      termsAccepted: createUserDto.termsAccepted ?? false,
+      acceptedTermsVersion: createUserDto.acceptedTermsVersion,
+      termsAcceptedAt: createUserDto.termsAcceptedAt,
       ...(settings ? { settings } : {}),
     };
 
@@ -261,6 +264,9 @@ export class UsersService implements OnModuleInit {
             activationTokenVersion: createUserDto.activationTokenVersion,
             status: createUserDto.status ?? UserStatus.ACTIVE,
             isVerified: createUserDto.isVerified ?? true,
+            termsAccepted: createUserDto.termsAccepted ?? false,
+            acceptedTermsVersion: createUserDto.acceptedTermsVersion,
+            termsAcceptedAt: createUserDto.termsAcceptedAt,
             ...(settings ? { settings } : {}),
           },
           $unset: { role: '' },
@@ -296,6 +302,33 @@ export class UsersService implements OnModuleInit {
 
   update(id: string, updateUserDto: UpdateUserDto) {
     return this.userModel.findByIdAndUpdate(id, updateUserDto, { new: true }).exec();
+  }
+
+  acceptTerms(id: string, version: string) {
+    return this.userModel
+      .findByIdAndUpdate(
+        id,
+        {
+          $set: {
+            acceptedTermsVersion: version,
+            termsAccepted: true,
+            termsAcceptedAt: new Date(),
+          },
+        },
+        { new: true },
+      )
+      .exec();
+  }
+
+  markTermsPendingForVersionChange() {
+    return this.userModel
+      .updateMany(
+        {},
+        {
+          $set: { termsAccepted: false },
+        },
+      )
+      .exec();
   }
 
   remove(id: string) {
