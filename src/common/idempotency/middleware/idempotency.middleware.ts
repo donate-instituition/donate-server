@@ -5,6 +5,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { Model } from 'mongoose';
 
 import { env } from '../../../config/env';
+import { PrettyLogger } from '../../logger';
 import {
   IdempotencyRecord,
   IdempotencyRecordDocument,
@@ -103,6 +104,8 @@ function sendConflict(response: Response, message: string) {
 
 @Injectable()
 export class IdempotencyMiddleware implements NestMiddleware {
+  private readonly logger = new PrettyLogger();
+
   constructor(
     @InjectModel(IdempotencyRecord.name)
     private readonly idempotencyRecordModel: Model<IdempotencyRecordDocument>,
@@ -142,8 +145,25 @@ export class IdempotencyMiddleware implements NestMiddleware {
         scope,
         status: IdempotencyRecordStatus.InProgress,
       });
+      this.logger.debug('Idempotency key accepted', IdempotencyMiddleware.name, {
+        idempotencyKey,
+        method,
+        path,
+        scope,
+      });
     } catch (error) {
       if (!isDuplicateKeyError(error)) {
+        this.logger.error(
+          'Idempotency storage failed',
+          error instanceof Error ? error.stack : undefined,
+          IdempotencyMiddleware.name,
+          {
+            idempotencyKey,
+            method,
+            path,
+            scope,
+          },
+        );
         next(error);
         return;
       }
@@ -151,11 +171,23 @@ export class IdempotencyMiddleware implements NestMiddleware {
       const existingRecord = await this.idempotencyRecordModel.findOne(filter);
 
       if (!existingRecord) {
+        this.logger.warn('Idempotency duplicate key without record', IdempotencyMiddleware.name, {
+          idempotencyKey,
+          method,
+          path,
+          scope,
+        });
         next(error);
         return;
       }
 
       if (existingRecord.expiresAt <= new Date()) {
+        this.logger.debug('Idempotency key expired; retrying request', IdempotencyMiddleware.name, {
+          idempotencyKey,
+          method,
+          path,
+          scope,
+        });
         await this.idempotencyRecordModel
           .deleteOne({
             ...filter,
@@ -183,6 +215,12 @@ export class IdempotencyMiddleware implements NestMiddleware {
       }
 
       if (existingRecord.fingerprint !== fingerprint) {
+        this.logger.warn('Idempotency key conflict', IdempotencyMiddleware.name, {
+          idempotencyKey,
+          method,
+          path,
+          scope,
+        });
         sendConflict(
           response,
           'Idempotency-Key already used with a different request.',
@@ -191,6 +229,12 @@ export class IdempotencyMiddleware implements NestMiddleware {
       }
 
       if (existingRecord.status === IdempotencyRecordStatus.InProgress) {
+        this.logger.warn('Idempotency key already in progress', IdempotencyMiddleware.name, {
+          idempotencyKey,
+          method,
+          path,
+          scope,
+        });
         response.setHeader('Retry-After', '1');
         sendConflict(
           response,
@@ -200,6 +244,13 @@ export class IdempotencyMiddleware implements NestMiddleware {
       }
 
       response.setHeader('Idempotency-Replayed', 'true');
+      this.logger.debug('Idempotency response replayed', IdempotencyMiddleware.name, {
+        idempotencyKey,
+        method,
+        path,
+        scope,
+        statusCode: existingRecord.responseStatusCode,
+      });
       response.status(existingRecord.responseStatusCode ?? 200);
 
       if (existingRecord.responseType === 'send') {
@@ -249,10 +300,24 @@ export class IdempotencyMiddleware implements NestMiddleware {
 
     response.on('finish', () => {
       if (response.statusCode >= 500 || response.statusCode === 429) {
+        this.logger.warn('Idempotency key released after failed response', IdempotencyMiddleware.name, {
+          idempotencyKey: filter.idempotencyKey,
+          method: filter.method,
+          path: filter.path,
+          scope: filter.scope,
+          statusCode: response.statusCode,
+        });
         void this.idempotencyRecordModel.deleteOne(filter).exec();
         return;
       }
 
+      this.logger.debug('Idempotency response cached', IdempotencyMiddleware.name, {
+        idempotencyKey: filter.idempotencyKey,
+        method: filter.method,
+        path: filter.path,
+        scope: filter.scope,
+        statusCode: response.statusCode,
+      });
       void this.idempotencyRecordModel
         .updateOne(filter, {
           $set: {
@@ -267,6 +332,12 @@ export class IdempotencyMiddleware implements NestMiddleware {
     });
 
     request.on('aborted', () => {
+      this.logger.warn('Idempotency key released after aborted request', IdempotencyMiddleware.name, {
+        idempotencyKey: filter.idempotencyKey,
+        method: filter.method,
+        path: filter.path,
+        scope: filter.scope,
+      });
       void this.idempotencyRecordModel.deleteOne(filter).exec();
     });
   }

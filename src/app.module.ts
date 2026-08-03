@@ -10,6 +10,7 @@ import {
   IdempotencyRecord,
   IdempotencyRecordSchema,
 } from './common/idempotency/schemas/idempotency-record.schema';
+import { RequestLoggingMiddleware } from './common/logger';
 import { createRateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { env } from './config/env';
 import { AuditLogsModule } from './domains/audit-logs/audit-logs.module';
@@ -30,7 +31,9 @@ import { PostCommentsModule } from './domains/post-comments/post-comments.module
 import { PostReactionsModule } from './domains/post-reactions/post-reactions.module';
 import { PostsModule } from './domains/posts/posts.module';
 import { ReportsModule } from './domains/reports/reports.module';
+import { SupportFaqsModule } from './domains/support-faqs/support-faqs.module';
 import { TaxReceiptsModule } from './domains/tax-receipts/tax-receipts.module';
+import { TermsModule } from './domains/terms/terms.module';
 import { TrackingEventsModule } from './domains/tracking-events/tracking-events.module';
 import { UsersModule } from './domains/users/users.module';
 
@@ -60,15 +63,22 @@ import { UsersModule } from './domains/users/users.module';
     PostReactionsModule,
     PostsModule,
     ReportsModule,
+    SupportFaqsModule,
     TaxReceiptsModule,
+    TermsModule,
     TrackingEventsModule,
   ],
   controllers: [AppController],
-  providers: [AppService, AllExceptionsFilter, IdempotencyMiddleware],
+  providers: [
+    AppService,
+    AllExceptionsFilter,
+    IdempotencyMiddleware,
+    RequestLoggingMiddleware,
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(IdempotencyMiddleware).forRoutes('*');
+    consumer.apply(RequestLoggingMiddleware, IdempotencyMiddleware).forRoutes('*');
 
     consumer
       .apply(

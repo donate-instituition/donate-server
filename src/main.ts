@@ -2,10 +2,17 @@ import { NestFactory } from '@nestjs/core';
 
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { PrettyLogger } from './common/logger';
 import { env } from './config/env';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const logger = new PrettyLogger();
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+    logger,
+  });
+
+  app.useLogger(logger);
 
   app.enableCors({
     origin: true,
@@ -23,5 +30,6 @@ async function bootstrap() {
   app.useGlobalFilters(app.get(AllExceptionsFilter));
 
   await app.listen(env.port);
+  logger.log(`API listening on http://localhost:${env.port}`, 'Bootstrap');
 }
 void bootstrap();
