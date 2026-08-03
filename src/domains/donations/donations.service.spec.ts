@@ -16,7 +16,8 @@ describe('DonationsService', () => {
   };
 
   const campaignModel = {
-    findById: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ title: 'Campanha Teste' }) }) }),
+    findById: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ institutionId: 'inst-1', title: 'Campanha Teste' }) }) }),
+    findByIdAndUpdate: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({}) }),
     findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'campaign-1' }) }) }),
   };
 
