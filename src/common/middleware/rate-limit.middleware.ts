@@ -4,6 +4,7 @@ type RateLimitOptions = {
   name: string;
   windowMs: number;
   maxRequests: number;
+  scope?: 'client' | 'route';
   skipSuccessfulOptions?: boolean;
 };
 
@@ -54,8 +55,27 @@ function getStore(name: string) {
   return store;
 }
 
+function getRateLimitKey(request: Request, scope: RateLimitOptions['scope']) {
+  const clientIp = getClientIp(request);
+
+  if (scope === 'client') {
+    return clientIp;
+  }
+
+  return `${clientIp}:${request.method}:${request.path}`;
+}
+
 export function createRateLimitMiddleware(options: RateLimitOptions) {
+  if (options.windowMs <= 0) {
+    throw new Error('Rate limit windowMs must be greater than zero');
+  }
+
+  if (options.maxRequests <= 0) {
+    throw new Error('Rate limit maxRequests must be greater than zero');
+  }
+
   const store = getStore(options.name);
+  const scope = options.scope ?? 'route';
 
   return (request: Request, response: Response, next: NextFunction) => {
     if (options.skipSuccessfulOptions && request.method === 'OPTIONS') {
@@ -64,7 +84,7 @@ export function createRateLimitMiddleware(options: RateLimitOptions) {
     }
 
     const now = Date.now();
-    const key = `${getClientIp(request)}:${request.method}:${request.path}`;
+    const key = getRateLimitKey(request, scope);
     const current = store.get(key);
     const record =
       current && current.resetAt > now

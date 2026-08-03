@@ -53,4 +53,19 @@ export const env = {
     'AUTH_RATE_LIMIT_MAX_REQUESTS',
     10,
   ),
+  idempotencyTtlMs: getOptionalNumberEnv(
+    'IDEMPOTENCY_TTL_MS',
+    24 * 60 * 60 * 1000,
+  ),
+  emailBrandHeroUrl: process.env.EMAIL_BRAND_HERO_URL?.trim() || '',
+  emailBrandLogoUrl: process.env.EMAIL_BRAND_LOGO_URL?.trim() || '',
+  emailAccountActivationUrl:
+    process.env.EMAIL_ACCOUNT_ACTIVATION_URL?.trim() ||
+    'http://localhost:3000/auth/activate-account',
+  emailPublicAppUrl: process.env.EMAIL_PUBLIC_APP_URL?.trim() || '',
+  emailSupportEmail:
+    process.env.EMAIL_SUPPORT_EMAIL?.trim() || 'contato@elodoar.local',
+  emailSupportPhone: process.env.EMAIL_SUPPORT_PHONE?.trim() || '',
+  rabbitmqUrl: process.env.RABBITMQ_URL?.trim() || '',
+  rabbitmqExchange: process.env.RABBITMQ_EXCHANGE?.trim() || 'donate.jobs',
 };

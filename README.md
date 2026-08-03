@@ -46,7 +46,33 @@ Optional variables:
 
 ```env
 PORT=3000
+RATE_LIMIT_WINDOW_MS=60000
+RATE_LIMIT_MAX_REQUESTS=120
+AUTH_RATE_LIMIT_WINDOW_MS=60000
+AUTH_RATE_LIMIT_MAX_REQUESTS=10
+IDEMPOTENCY_TTL_MS=86400000
 ```
+
+`RATE_LIMIT_*` controls the global per-client request limit. `AUTH_RATE_LIMIT_*`
+applies a stricter limit to authentication routes.
+
+For mutation requests that must not be duplicated, send an `Idempotency-Key`
+header. Repeating the same key with the same method, route and body replays the
+first response. Reusing the same key with a different body returns `409`.
+Idempotency records are stored in MongoDB in the `idempotency_records`
+collection, with a unique key per scope, method, route and idempotency key.
+The scope defaults to the client IP, but callers can send
+`X-Idempotency-Scope` when they need a stable shared scope across services.
+`IDEMPOTENCY_TTL_MS` controls the `expiresAt` TTL used to clean old records.
+
+External API integrations should sanitize logs with
+`sanitizeExternalApiRequest` and `sanitizeExternalApiResponse` from
+`src/common/sanitization`. These helpers redact credentials, tokens, document
+numbers, payment card fields and sensitive headers before request/response data
+is logged or persisted.
+
+Account creation publishes an `email.send` job to RabbitMQ so
+`donate-workers` can send the account confirmation email asynchronously.
 
 If a required variable is missing, the application stops on startup with a clear error message.
 

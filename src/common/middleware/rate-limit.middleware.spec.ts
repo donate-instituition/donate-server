@@ -89,4 +89,41 @@ describe('createRateLimitMiddleware', () => {
     expect(next).toHaveBeenCalledTimes(2);
     expect(blockedResponse.status).toHaveBeenCalledWith(429);
   });
+
+  it('can limit all routes for the same client together', () => {
+    const middleware = createRateLimitMiddleware({
+      name: `test-client-scope-${Date.now()}`,
+      windowMs: 60_000,
+      maxRequests: 2,
+      scope: 'client',
+    });
+    const next: NextFunction = jest.fn();
+
+    middleware(createRequest('GET', '/campaigns'), createResponse(), next);
+    middleware(createRequest('GET', '/posts'), createResponse(), next);
+
+    const blockedResponse = createResponse();
+    middleware(createRequest('GET', '/donations'), blockedResponse, next);
+
+    expect(next).toHaveBeenCalledTimes(2);
+    expect(blockedResponse.status).toHaveBeenCalledWith(429);
+  });
+
+  it('rejects invalid rate limit settings', () => {
+    expect(() =>
+      createRateLimitMiddleware({
+        name: `test-invalid-window-${Date.now()}`,
+        windowMs: 0,
+        maxRequests: 1,
+      }),
+    ).toThrow('Rate limit windowMs must be greater than zero');
+
+    expect(() =>
+      createRateLimitMiddleware({
+        name: `test-invalid-max-${Date.now()}`,
+        windowMs: 1_000,
+        maxRequests: 0,
+      }),
+    ).toThrow('Rate limit maxRequests must be greater than zero');
+  });
 });

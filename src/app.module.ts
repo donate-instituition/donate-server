@@ -5,6 +5,11 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { IdempotencyMiddleware } from './common/idempotency/middleware/idempotency.middleware';
+import {
+  IdempotencyRecord,
+  IdempotencyRecordSchema,
+} from './common/idempotency/schemas/idempotency-record.schema';
 import { createRateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { env } from './config/env';
 import { AuditLogsModule } from './domains/audit-logs/audit-logs.module';
@@ -32,6 +37,9 @@ import { UsersModule } from './domains/users/users.module';
 @Module({
   imports: [
     MongooseModule.forRoot(env.mongodbUri),
+    MongooseModule.forFeature([
+      { name: IdempotencyRecord.name, schema: IdempotencyRecordSchema },
+    ]),
     AuthModule,
     UsersModule,
     AuditLogsModule,
@@ -56,10 +64,12 @@ import { UsersModule } from './domains/users/users.module';
     TrackingEventsModule,
   ],
   controllers: [AppController],
-  providers: [AppService, AllExceptionsFilter],
+  providers: [AppService, AllExceptionsFilter, IdempotencyMiddleware],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
+    consumer.apply(IdempotencyMiddleware).forRoutes('*');
+
     consumer
       .apply(
         createRateLimitMiddleware({
@@ -72,6 +82,8 @@ export class AppModule implements NestModule {
       .forRoutes(
         'auth/login',
         'auth/register',
+        'auth/activate-account',
+        'auth/resend-activation',
         'auth/forgot-password',
         'auth/refresh',
       );
@@ -82,6 +94,7 @@ export class AppModule implements NestModule {
           name: 'global',
           windowMs: env.rateLimitWindowMs,
           maxRequests: env.rateLimitMaxRequests,
+          scope: 'client',
           skipSuccessfulOptions: true,
         }),
       )
