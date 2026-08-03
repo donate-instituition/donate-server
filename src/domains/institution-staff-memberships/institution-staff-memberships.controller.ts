@@ -45,6 +45,18 @@ export class InstitutionStaffMembershipsController {
     );
   }
 
+  @Roles(UserRole.INSTITUTION_STAFF, UserRole.PLATFORM_ADMIN)
+  @Get('me')
+  findMine(@CurrentUser() user: AuthenticatedUser | undefined) {
+    return this.institutionStaffMembershipsService.findMine(user);
+  }
+
+  @Roles(UserRole.INSTITUTION_STAFF, UserRole.PLATFORM_ADMIN)
+  @Get('team')
+  findMyTeam(@CurrentUser() user: AuthenticatedUser | undefined) {
+    return this.institutionStaffMembershipsService.findMyTeam(user);
+  }
+
   @Get()
   findAll() {
     return this.institutionStaffMembershipsService.findAll();

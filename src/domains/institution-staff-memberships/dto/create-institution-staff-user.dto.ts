@@ -7,7 +7,17 @@ export class CreateInstitutionStaffUserDto {
 
   email!: string;
 
-  password!: string;
+  cpf?: string;
+
+  birthDate?: string;
+
+  phone?: string;
+
+  password?: string;
+
+  passwordMode?: 'manual' | 'generated';
+
+  forcePasswordChange?: boolean;
 
   role?: InstitutionStaffMembershipRole;
 
