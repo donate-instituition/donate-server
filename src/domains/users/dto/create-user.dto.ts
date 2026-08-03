@@ -28,6 +28,10 @@ export class CreateUserDto {
 
   passwordHash!: string;
 
+  passwordChangeRequired?: boolean;
+
+  activationTokenVersion?: string;
+
   birthDate?: Date;
 
   profilePhotoUrl?: string;

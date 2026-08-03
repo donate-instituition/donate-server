@@ -108,6 +108,12 @@ export class User {
   @Prop({ required: true })
   passwordHash!: string;
 
+  @Prop({ required: true, default: false })
+  passwordChangeRequired!: boolean;
+
+  @Prop({ trim: true })
+  activationTokenVersion?: string;
+
   @Prop()
   birthDate?: Date;
 

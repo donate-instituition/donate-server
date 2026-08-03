@@ -10,7 +10,9 @@ import {
   Institution,
   InstitutionSchema,
 } from '../domains/institutions/schemas/institution.schema';
+import { AuditLogsModule } from '../domains/audit-logs/audit-logs.module';
 import { UsersModule } from '../domains/users/users.module';
+import { EmailJobsModule } from '../notifications/email/email-jobs.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -19,12 +21,19 @@ import {
   RefreshTokenSession,
   RefreshTokenSessionSchema,
 } from './schemas/refresh-token-session.schema';
+import {
+  PasswordResetRequest,
+  PasswordResetRequestSchema,
+} from './schemas/password-reset-request.schema';
 
 @Module({
   imports: [
     UsersModule,
+    EmailJobsModule,
+    AuditLogsModule,
     MongooseModule.forFeature([
       { name: RefreshTokenSession.name, schema: RefreshTokenSessionSchema },
+      { name: PasswordResetRequest.name, schema: PasswordResetRequestSchema },
       { name: Institution.name, schema: InstitutionSchema },
       { name: InstitutionStaffMembership.name, schema: InstitutionStaffMembershipSchema },
     ]),

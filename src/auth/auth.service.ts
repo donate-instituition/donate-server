@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { compare, hash } from 'bcryptjs';
+import { randomBytes, randomInt, randomUUID } from 'crypto';
 import { sign, verify } from 'jsonwebtoken';
 import { Model, Types } from 'mongoose';
 
@@ -27,6 +28,8 @@ import {
 } from '../domains/institutions/schemas/institution.schema';
 import { UserRole, UserStatus, UserType } from '../domains/users/models';
 import { UsersService } from '../domains/users/users.service';
+import { AuditLogsService } from '../domains/audit-logs/audit-logs.service';
+import { EmailJobsService } from '../notifications/email/email-jobs.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateMySettingsDto } from './dto/update-my-settings.dto';
@@ -34,7 +37,17 @@ import {
   RefreshTokenSession,
   RefreshTokenSessionDocument,
 } from './schemas/refresh-token-session.schema';
+import {
+  PasswordResetRequest,
+  PasswordResetRequestDocument,
+  PasswordResetRequestStatus,
+} from './schemas/password-reset-request.schema';
 import type { AuthenticatedUser } from './types/authenticated-user.type';
+import {
+  createAccountActivationUrl,
+  verifyAccountActivationToken,
+} from './account-activation';
+import { assertPasswordPolicy } from './password-policy';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -42,8 +55,12 @@ export class AuthService implements OnModuleInit {
 
   constructor(
     private readonly usersService: UsersService,
+    private readonly emailJobsService: EmailJobsService,
+    private readonly auditLogsService: AuditLogsService,
     @InjectModel(RefreshTokenSession.name)
     private readonly refreshTokenSessionModel: Model<RefreshTokenSessionDocument>,
+    @InjectModel(PasswordResetRequest.name)
+    private readonly passwordResetRequestModel: Model<PasswordResetRequestDocument>,
     @InjectModel(Institution.name)
     private readonly institutionModel: Model<InstitutionDocument>,
     @InjectModel(InstitutionStaffMembership.name)
@@ -158,6 +175,7 @@ export class AuthService implements OnModuleInit {
     email: string;
     roles?: Array<string | { name: string; grantedAt?: Date; grantedBy?: unknown }>;
     settings?: { preferredRole?: string };
+    passwordChangeRequired?: boolean;
   }) {
     const roles = this.toSessionRoleGrants(user);
     const preferredRole = user.settings?.preferredRole
@@ -170,6 +188,7 @@ export class AuthService implements OnModuleInit {
       email: user.email,
       roles,
       preferredRole: roles.some((role) => role.name === preferredRole) ? preferredRole : undefined,
+      passwordChangeRequired: Boolean(user.passwordChangeRequired),
     };
   }
 
@@ -228,6 +247,7 @@ export class AuthService implements OnModuleInit {
     roles?: Array<string | { name: string }>;
     type: string;
     status: string;
+    passwordChangeRequired?: boolean;
   }) {
     const roles = this.toApiRoles(user);
 
@@ -237,6 +257,7 @@ export class AuthService implements OnModuleInit {
       roles,
       type: user.type,
       status: user.status,
+      passwordChangeRequired: Boolean(user.passwordChangeRequired),
     };
 
     return sign(payload, env.jwtSecret, {
@@ -306,7 +327,35 @@ export class AuthService implements OnModuleInit {
     return Array.from(new Set(roles));
   }
 
-  private async assertCanIssueSession(user: { _id: Types.ObjectId; roles?: Array<UserRole | { name: UserRole }> }) {
+  private async assertCanIssueSession(user: {
+    _id: Types.ObjectId;
+    roles?: Array<UserRole | { name: UserRole }>;
+    status?: UserStatus;
+  }) {
+    if (user.status === UserStatus.PENDING_VERIFICATION) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        code: 'ACCOUNT_PENDING_VERIFICATION',
+        message: 'Account pending verification',
+      });
+    }
+
+    if (user.status === UserStatus.SUSPENDED) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        code: 'ACCOUNT_SUSPENDED',
+        message: 'Account suspended',
+      });
+    }
+
+    if (user.status === UserStatus.DELETED) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        code: 'ACCOUNT_DELETED',
+        message: 'Account deleted',
+      });
+    }
+
     const roles = this.toApiRoles(user);
 
     if (!roles.includes(UserRole.INSTITUTION_STAFF)) {
@@ -340,6 +389,35 @@ export class AuthService implements OnModuleInit {
     }
   }
 
+  private async audit(input: {
+    action: string;
+    actorUserId?: string;
+    targetId?: string;
+    targetType: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    try {
+      await this.auditLogsService.create({
+        action: input.action,
+        actorUserId:
+          input.actorUserId && Types.ObjectId.isValid(input.actorUserId)
+            ? new Types.ObjectId(input.actorUserId)
+            : undefined,
+        targetId:
+          input.targetId && Types.ObjectId.isValid(input.targetId)
+            ? new Types.ObjectId(input.targetId)
+            : undefined,
+        targetType: input.targetType,
+        metadata: input.metadata,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to write audit log ${input.action}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
   async login(loginDto: LoginDto) {
     const user = await this.usersService.findByEmail(loginDto.email);
 
@@ -358,6 +436,13 @@ export class AuthService implements OnModuleInit {
     const accessToken = this.createAccessToken(user);
     const refreshToken = this.createRefreshToken(user._id.toString());
     await this.storeRefreshToken(user._id.toString(), refreshToken);
+    await this.audit({
+      action: 'auth.login',
+      actorUserId: user._id.toString(),
+      targetId: user._id.toString(),
+      targetType: 'user',
+      metadata: { email: user.email },
+    });
 
     return {
       token: accessToken,
@@ -379,6 +464,7 @@ export class AuthService implements OnModuleInit {
     if (!registerDto.password) {
       throw new BadRequestException('Password is required');
     }
+    assertPasswordPolicy(registerDto.password);
 
     if (!registerDto.cpf?.trim()) {
       throw new BadRequestException('CPF is required');
@@ -436,7 +522,10 @@ export class AuthService implements OnModuleInit {
           ? [UserRole.INSTITUTION_STAFF, UserRole.DONOR]
           : [UserRole.DONOR],
       type: UserType.PERSON,
-      status: UserStatus.ACTIVE,
+      status:
+        accountType === 'INSTITUTION'
+          ? UserStatus.ACTIVE
+          : UserStatus.PENDING_VERIFICATION,
     });
 
     try {
@@ -467,6 +556,17 @@ export class AuthService implements OnModuleInit {
           throw error;
         }
 
+        await this.audit({
+          action: 'auth.account_created',
+          targetId: createdUser._id.toString(),
+          targetType: 'user',
+          metadata: {
+            accountType,
+            email: normalizedEmail,
+            institutionId: institution._id.toString(),
+          },
+        });
+
         return {
           status: 'pending-approval',
           message: 'Institution registration submitted for platform review',
@@ -482,15 +582,23 @@ export class AuthService implements OnModuleInit {
       throw error;
     }
 
-    const accessToken = this.createAccessToken(createdUser);
-    const refreshToken = this.createRefreshToken(createdUser._id.toString());
-    await this.storeRefreshToken(createdUser._id.toString(), refreshToken);
+    await this.queueAccountCreatedEmail({
+      accountStatus: 'pending-verification',
+      email: normalizedEmail,
+      name: createdUser.fullName,
+      userId: createdUser._id.toString(),
+    });
+    await this.audit({
+      action: 'auth.account_created',
+      targetId: createdUser._id.toString(),
+      targetType: 'user',
+      metadata: { accountType, email: normalizedEmail },
+    });
 
     return {
-      token: accessToken,
-      accessToken,
-      refreshToken,
-      user: this.toSessionUser(createdUser),
+      status: 'pending-verification',
+      message: 'Account created. Check your email to activate your account.',
+      email: normalizedEmail,
     };
   }
 
@@ -542,8 +650,108 @@ export class AuthService implements OnModuleInit {
     };
   }
 
+  async activateAccount(body: { token: string }) {
+    if (!body.token?.trim()) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'ACCOUNT_ACTIVATION_TOKEN_INVALID',
+        message: 'Account activation token is invalid',
+      });
+    }
+
+    let payload: { sub: string; version: string };
+
+    try {
+      payload = verifyAccountActivationToken(body.token.trim());
+    } catch {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'ACCOUNT_ACTIVATION_TOKEN_INVALID',
+        message: 'Account activation token is invalid',
+      });
+    }
+
+    const user = await this.usersService.findOne(payload.sub);
+
+    if (!user) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'ACCOUNT_ACTIVATION_TOKEN_INVALID',
+        message: 'Account activation token is invalid',
+      });
+    }
+
+    if (user.activationTokenVersion !== payload.version) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'ACCOUNT_ACTIVATION_TOKEN_INVALID',
+        message: 'Account activation token is invalid',
+      });
+    }
+
+    if (user.status === UserStatus.PENDING_VERIFICATION || !user.isVerified) {
+      await this.usersService.update(user._id.toString(), {
+        activationTokenVersion: null,
+        isVerified: true,
+        status: UserStatus.ACTIVE,
+      });
+    }
+    await this.audit({
+      action: 'auth.account_activated',
+      actorUserId: user._id.toString(),
+      targetId: user._id.toString(),
+      targetType: 'user',
+      metadata: { email: user.email },
+    });
+
+    return {
+      email: user.email,
+      message: 'Conta ativada com sucesso.',
+      status: 'active',
+    };
+  }
+
+  async resendActivationEmail(body: { email: string }) {
+    const email = body.email?.trim().toLowerCase();
+    const response = {
+      message:
+        'Se existir uma conta pendente com este e-mail, enviaremos um novo link de ativação.',
+    };
+
+    if (!email) {
+      return response;
+    }
+
+    const user = await this.usersService.findByEmail(email);
+
+    if (!user || user.status !== UserStatus.PENDING_VERIFICATION) {
+      return response;
+    }
+
+    await this.queueAccountCreatedEmail({
+      accountStatus: 'pending-verification',
+      email: user.email,
+      name: user.fullName ?? user.email,
+      userId: user._id.toString(),
+    });
+    await this.audit({
+      action: 'auth.activation_resent',
+      targetId: user._id.toString(),
+      targetType: 'user',
+      metadata: { email: user.email },
+    });
+
+    return response;
+  }
+
   async logout(refreshToken?: string, userId?: string) {
     await this.revokeRefreshToken(refreshToken, userId);
+    await this.audit({
+      action: 'auth.logout',
+      actorUserId: userId,
+      targetId: userId,
+      targetType: 'user',
+    });
     return { message: 'Logged out successfully' };
   }
 
@@ -565,10 +773,272 @@ export class AuthService implements OnModuleInit {
     return this.toSessionUser(updatedUser);
   }
 
-  forgotPassword(body: { email: string }) {
+  async forgotPassword(body: { email: string }) {
+    const email = body.email?.trim().toLowerCase();
+    const response = {
+      message:
+        'Se existir uma conta com este e-mail, enviaremos um código para redefinição.',
+    };
+
+    if (!email) {
+      return response;
+    }
+
+    const user = await this.usersService.findByEmail(email);
+
+    if (!user || user.status === UserStatus.DELETED) {
+      return response;
+    }
+
+    const code = this.generateResetCode();
+
+    await this.passwordResetRequestModel
+      .updateMany(
+        { email, status: PasswordResetRequestStatus.Pending },
+        { status: PasswordResetRequestStatus.Used, usedAt: new Date() },
+      )
+      .exec();
+
+    const resetRequest = await this.passwordResetRequestModel.create({
+      codeHash: await hash(code, 10),
+      email,
+      expiresAt: new Date(Date.now() + 1000 * 60 * 15),
+    });
+    await this.audit({
+      action: 'auth.password_reset_requested',
+      targetId: user._id.toString(),
+      targetType: 'user',
+      metadata: { email },
+    });
+
+    await this.queuePasswordResetCodeEmail({
+      code,
+      email,
+      name: user.fullName ?? user.email,
+      resetRequestId: resetRequest._id.toString(),
+      userId: user._id.toString(),
+    });
+
     return {
       message:
-        'Se existir uma conta com este e-mail, enviaremos instruções para redefinição.',
+        'Se existir uma conta com este e-mail, enviaremos um código para redefinição.',
     };
+  }
+
+  async confirmForgotPassword(body: { email: string; code: string }) {
+    const email = body.email?.trim().toLowerCase();
+    const code = body.code?.trim();
+
+    if (!email || !/^\d{6}$/.test(code ?? '')) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'PASSWORD_RESET_CODE_INVALID',
+        message: 'Invalid reset code',
+      });
+    }
+
+    const resetRequest = await this.passwordResetRequestModel
+      .findOne({
+        email,
+        expiresAt: { $gt: new Date() },
+        status: PasswordResetRequestStatus.Pending,
+      })
+      .sort({ createdAt: -1 })
+      .exec();
+
+    if (!resetRequest || resetRequest.attempts >= 5) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'PASSWORD_RESET_CODE_INVALID',
+        message: 'Invalid reset code',
+      });
+    }
+
+    const codeMatches = await compare(code, resetRequest.codeHash);
+
+    if (!codeMatches) {
+      resetRequest.attempts += 1;
+      await resetRequest.save();
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'PASSWORD_RESET_CODE_INVALID',
+        message: 'Invalid reset code',
+      });
+    }
+
+    const user = await this.usersService.findByEmail(email);
+
+    if (!user || user.status === UserStatus.DELETED) {
+      resetRequest.status = PasswordResetRequestStatus.Used;
+      resetRequest.usedAt = new Date();
+      await resetRequest.save();
+      return { message: 'Se o código estiver correto, enviaremos uma senha temporária por e-mail.' };
+    }
+
+    const temporaryPassword = this.generateTemporaryPassword();
+    const updatedUser = await this.usersService.update(user._id.toString(), {
+      passwordChangeRequired: true,
+      passwordHash: await hash(temporaryPassword, 10),
+    });
+
+    resetRequest.status = PasswordResetRequestStatus.Used;
+    resetRequest.usedAt = new Date();
+    await resetRequest.save();
+
+    await this.revokeRefreshToken(undefined, user._id.toString());
+    await this.queueTemporaryPasswordEmail({
+      email,
+      name: updatedUser?.fullName ?? user.fullName ?? user.email,
+      resetRequestId: resetRequest._id.toString(),
+      temporaryPassword,
+      userId: user._id.toString(),
+    });
+    await this.audit({
+      action: 'auth.password_reset_confirmed',
+      targetId: user._id.toString(),
+      targetType: 'user',
+      metadata: { email },
+    });
+
+    return { message: 'Enviamos uma senha temporária para seu e-mail.' };
+  }
+
+  async changePassword(user: AuthenticatedUser | undefined, body: { currentPassword: string; newPassword: string }) {
+    if (!user) {
+      throw new UnauthorizedException('Authentication token is missing');
+    }
+
+    if (!body.currentPassword || !body.newPassword) {
+      throw new BadRequestException('Current password and new password are required');
+    }
+    assertPasswordPolicy(body.newPassword);
+
+    if (body.currentPassword === body.newPassword) {
+      throw new BadRequestException('New password must be different from current password');
+    }
+
+    const existingUser = await this.usersService.findOne(user.sub);
+
+    if (!existingUser) {
+      throw new UnauthorizedException('Authentication token is invalid');
+    }
+
+    const passwordMatches = await compare(body.currentPassword, existingUser.passwordHash);
+
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Current password is invalid');
+    }
+
+    const updatedUser = await this.usersService.update(existingUser._id.toString(), {
+      passwordChangeRequired: false,
+      passwordHash: await hash(body.newPassword, 10),
+    });
+
+    if (!updatedUser) {
+      throw new UnauthorizedException('Authentication token is invalid');
+    }
+
+    await this.revokeRefreshToken(undefined, existingUser._id.toString());
+    const accessToken = this.createAccessToken(updatedUser);
+    const refreshToken = this.createRefreshToken(updatedUser._id.toString());
+    await this.storeRefreshToken(updatedUser._id.toString(), refreshToken);
+    await this.audit({
+      action: 'auth.password_changed',
+      actorUserId: updatedUser._id.toString(),
+      targetId: updatedUser._id.toString(),
+      targetType: 'user',
+    });
+
+    return {
+      token: accessToken,
+      accessToken,
+      refreshToken,
+      user: this.toSessionUser(updatedUser),
+    };
+  }
+
+  private generateResetCode() {
+    return String(randomInt(100000, 1000000));
+  }
+
+  private generateTemporaryPassword() {
+    return `Elo-${randomBytes(5).toString('hex')}A7`;
+  }
+
+  private async queueAccountCreatedEmail(input: {
+    accountStatus: 'pending-approval' | 'pending-verification';
+    email: string;
+    name: string;
+    userId: string;
+  }) {
+    try {
+      const activationTokenVersion =
+        input.accountStatus === 'pending-verification' ? randomUUID() : undefined;
+      if (activationTokenVersion) {
+        await this.usersService.update(input.userId, { activationTokenVersion });
+      }
+
+      await this.emailJobsService.sendAccountCreatedEmail({
+        accountStatus: input.accountStatus,
+        activationUrl:
+          activationTokenVersion
+            ? createAccountActivationUrl(input.userId, activationTokenVersion)
+            : undefined,
+        name: input.name,
+        to: input.email,
+        userId: input.userId,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue account created email for user ${input.userId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  private async queuePasswordResetCodeEmail(input: {
+    code: string;
+    email: string;
+    name: string;
+    resetRequestId: string;
+    userId: string;
+  }) {
+    try {
+      await this.emailJobsService.sendPasswordResetCodeEmail({
+        code: input.code,
+        jobId: input.resetRequestId,
+        name: input.name,
+        to: input.email,
+        userId: input.userId,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue password reset code email for user ${input.userId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  private async queueTemporaryPasswordEmail(input: {
+    email: string;
+    name: string;
+    resetRequestId: string;
+    temporaryPassword: string;
+    userId: string;
+  }) {
+    try {
+      await this.emailJobsService.sendTemporaryPasswordEmail({
+        name: input.name,
+        jobId: input.resetRequestId,
+        temporaryPassword: input.temporaryPassword,
+        to: input.email,
+        userId: input.userId,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue temporary password email for user ${input.userId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 }

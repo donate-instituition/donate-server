@@ -186,6 +186,8 @@ export class UsersService implements OnModuleInit {
       cpf: createUserDto.cpf,
       birthDate: createUserDto.birthDate,
       passwordHash: createUserDto.passwordHash,
+      passwordChangeRequired: createUserDto.passwordChangeRequired ?? false,
+      activationTokenVersion: createUserDto.activationTokenVersion,
       status: createUserDto.status ?? UserStatus.ACTIVE,
       isVerified: createUserDto.isVerified ?? true,
       ...(settings ? { settings } : {}),
@@ -255,6 +257,8 @@ export class UsersService implements OnModuleInit {
             cpf: createUserDto.cpf,
             birthDate: createUserDto.birthDate,
             passwordHash: createUserDto.passwordHash,
+            passwordChangeRequired: createUserDto.passwordChangeRequired ?? false,
+            activationTokenVersion: createUserDto.activationTokenVersion,
             status: createUserDto.status ?? UserStatus.ACTIVE,
             isVerified: createUserDto.isVerified ?? true,
             ...(settings ? { settings } : {}),
@@ -291,8 +295,7 @@ export class UsersService implements OnModuleInit {
   }
 
   update(id: string, updateUserDto: UpdateUserDto) {
-    void updateUserDto;
-    return `This action updates a #${id} user`;
+    return this.userModel.findByIdAndUpdate(id, updateUserDto, { new: true }).exec();
   }
 
   remove(id: string) {

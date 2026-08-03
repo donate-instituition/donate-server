@@ -17,6 +17,10 @@ export class UpdateUserDto {
 
   passwordHash?: string;
 
+  passwordChangeRequired?: boolean;
+
+  activationTokenVersion?: string | null;
+
   birthDate?: Date;
 
   profilePhotoUrl?: string;

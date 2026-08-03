@@ -6,4 +6,5 @@ export type AuthenticatedUser = {
   roles: UserRole[];
   type: UserType;
   status: UserStatus;
+  passwordChangeRequired?: boolean;
 };

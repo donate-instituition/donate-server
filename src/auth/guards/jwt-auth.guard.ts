@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -41,9 +42,23 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       request.user = verify(token, env.jwtSecret) as AuthenticatedUser;
-      return true;
     } catch {
       throw new UnauthorizedException('Authentication token is invalid');
     }
+
+    if (request.user.passwordChangeRequired && !this.isPasswordChangeRoute(request)) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'PASSWORD_CHANGE_REQUIRED',
+        message: 'Password change required',
+      });
+    }
+
+    return true;
+  }
+
+  private isPasswordChangeRoute(request: AuthenticatedRequest) {
+    const path = request.path ?? request.url ?? '';
+    return request.method === 'PATCH' && path.includes('/auth/me/password');
   }
 }
