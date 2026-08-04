@@ -36,7 +36,7 @@ export class RabbitMqPublisherService
     }
 
     const channel = await this.getChannel();
-    channel.publish(
+    const published = channel.publish(
       env.rabbitmqExchange,
       routingKey,
       Buffer.from(JSON.stringify(message)),
@@ -44,6 +44,16 @@ export class RabbitMqPublisherService
         contentType: 'application/json',
         persistent: true,
       },
+    );
+
+    this.logger.debug(
+      JSON.stringify({
+        event: 'rabbitmq_message_published',
+        idempotencyKey: message.idempotencyKey,
+        published,
+        routingKey,
+        type: message.type,
+      }),
     );
   }
 

@@ -5,6 +5,8 @@ export class CreateStripePaymentIntentDto {
 
   paymentMethod?: 'card' | 'pix';
 
+  donationKind?: 'single' | 'monthly';
+
   receiptEmail?: string;
 
   savePaymentMethod?: boolean;

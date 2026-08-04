@@ -79,6 +79,7 @@ export class CampaignsService {
       progress,
       active,
       endsAt: campaign.endAt ? new Date(campaign.endAt).toISOString().slice(0, 10) : undefined,
+      acceptsRecurringDonations: Boolean(institution?.acceptsRecurringDonations),
       location,
     };
   }

@@ -38,6 +38,10 @@ export class UpdateInstitutionDto {
 
   pixKey?: string;
 
+  stripeConnectAccountId?: string;
+
+  acceptsRecurringDonations?: boolean;
+
   taxReceiptEnabled?: boolean;
 
   stats?: InstitutionStats;

@@ -131,6 +131,12 @@ export class Institution {
   @Prop({ trim: true })
   pixKey?: string;
 
+  @Prop({ trim: true })
+  stripeConnectAccountId?: string;
+
+  @Prop({ required: true, default: false })
+  acceptsRecurringDonations!: boolean;
+
   @Prop({ required: true, default: false })
   taxReceiptEnabled!: boolean;
 

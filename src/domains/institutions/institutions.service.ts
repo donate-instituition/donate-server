@@ -81,6 +81,7 @@ export class InstitutionsService {
       progress,
       active,
       endsAt: campaign.endAt ? new Date(campaign.endAt).toISOString().slice(0, 10) : undefined,
+      acceptsRecurringDonations: Boolean(institution?.acceptsRecurringDonations),
       location: this.resolveCampaignLocation(campaign, institution),
     };
   }
@@ -97,6 +98,7 @@ export class InstitutionsService {
       activeCampaigns: institution.stats?.campaignsCount ?? 0,
       verified: institution.verification?.isVerified ?? false,
       description: institution.description ?? 'Descrição indisponível.',
+      acceptsRecurringDonations: Boolean(institution.acceptsRecurringDonations),
       location,
     };
   }
@@ -205,6 +207,7 @@ export class InstitutionsService {
       ...this.toAppInstitution(institution),
       foundedYear: 2010,
       email: institution.email,
+      stripeConnectAccountId: institution.stripeConnectAccountId,
       website: institution.website ?? undefined,
       activeCampaigns: campaigns.filter((campaign) => campaign.status === CampaignStatus.PUBLISHED).length,
       campaigns: campaigns.map((campaign) => this.toAppCampaign(campaign, institution)),
