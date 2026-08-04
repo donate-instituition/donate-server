@@ -13,6 +13,8 @@ import { sign, verify } from 'jsonwebtoken';
 import { Model, Types } from 'mongoose';
 
 import { env } from '../config/env';
+import { AppSettingKey } from '../domains/app-settings/app-settings.defaults';
+import { AppSettingsService } from '../domains/app-settings/app-settings.service';
 import {
   InstitutionStaffMembershipRole,
   InstitutionStaffMembershipStatus,
@@ -57,6 +59,7 @@ export class AuthService implements OnModuleInit {
     private readonly usersService: UsersService,
     private readonly emailJobsService: EmailJobsService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly appSettingsService: AppSettingsService,
     @InjectModel(RefreshTokenSession.name)
     private readonly refreshTokenSessionModel: Model<RefreshTokenSessionDocument>,
     @InjectModel(PasswordResetRequest.name)
@@ -990,7 +993,14 @@ export class AuthService implements OnModuleInit {
         accountStatus: input.accountStatus,
         activationUrl:
           activationTokenVersion
-            ? createAccountActivationUrl(input.userId, activationTokenVersion)
+            ? createAccountActivationUrl(
+                input.userId,
+                activationTokenVersion,
+                await this.appSettingsService.getString(
+                  AppSettingKey.EMAIL_ACCOUNT_ACTIVATION_URL,
+                  env.emailAccountActivationUrl,
+                ),
+              )
             : undefined,
         name: input.name,
         to: input.email,

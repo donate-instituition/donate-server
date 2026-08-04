@@ -69,5 +69,18 @@ export const env = {
   rabbitmqUrl: process.env.RABBITMQ_URL?.trim() || '',
   rabbitmqExchange: process.env.RABBITMQ_EXCHANGE?.trim() || 'donate.jobs',
   stripeSecretKey: process.env.STRIPE_SECRET_KEY?.trim() || '',
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET?.trim() || '',
   stripeCurrency: process.env.STRIPE_CURRENCY?.trim().toLowerCase() || 'brl',
+  stripeServiceFeeBps: getOptionalNumberEnv('STRIPE_SERVICE_FEE_BPS', 0),
+  objectStorageDriver: process.env.OBJECT_STORAGE_DRIVER?.trim() || 'local',
+  objectStorageSignedUrlTtlSeconds: getOptionalNumberEnv(
+    'OBJECT_STORAGE_SIGNED_URL_TTL_SECONDS',
+    5 * 60,
+  ),
+  s3Region: process.env.S3_REGION?.trim() || 'us-east-1',
+  s3Bucket: process.env.S3_BUCKET?.trim() || '',
+  s3Endpoint: process.env.S3_ENDPOINT?.trim() || '',
+  s3ForcePathStyle: process.env.S3_FORCE_PATH_STYLE?.trim() === 'true',
+  s3AccessKeyId: process.env.S3_ACCESS_KEY_ID?.trim() || '',
+  s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY?.trim() || '',
 };

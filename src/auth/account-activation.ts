@@ -20,8 +20,11 @@ export function createAccountActivationToken(userId: string, version: string) {
   );
 }
 
-export function createAccountActivationUrl(userId: string, version: string) {
-  const baseUrl = env.emailAccountActivationUrl || 'http://localhost:3000/auth/activate-account';
+export function createAccountActivationUrl(
+  userId: string,
+  version: string,
+  baseUrl = env.emailAccountActivationUrl || 'http://localhost:3000/auth/activate-account',
+) {
   const separator = baseUrl.includes('?') ? '&' : '?';
 
   return `${baseUrl}${separator}token=${encodeURIComponent(createAccountActivationToken(userId, version))}`;

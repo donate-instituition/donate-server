@@ -14,6 +14,7 @@ import { RequestLoggingMiddleware } from './common/logger';
 import { createRateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { env } from './config/env';
 import { AuditLogsModule } from './domains/audit-logs/audit-logs.module';
+import { AppSettingsModule } from './domains/app-settings/app-settings.module';
 import { CampaignsModule } from './domains/campaigns/campaigns.module';
 import { CategoriesModule } from './domains/categories/categories.module';
 import { ConversationsModule } from './domains/conversations/conversations.module';
@@ -36,6 +37,7 @@ import { TaxReceiptsModule } from './domains/tax-receipts/tax-receipts.module';
 import { TermsModule } from './domains/terms/terms.module';
 import { TrackingEventsModule } from './domains/tracking-events/tracking-events.module';
 import { UsersModule } from './domains/users/users.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -43,6 +45,8 @@ import { UsersModule } from './domains/users/users.module';
     MongooseModule.forFeature([
       { name: IdempotencyRecord.name, schema: IdempotencyRecordSchema },
     ]),
+    StorageModule,
+    AppSettingsModule,
     AuthModule,
     UsersModule,
     AuditLogsModule,

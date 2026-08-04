@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 
 import { env } from '../../config/env';
+import { AppSettingKey } from '../../domains/app-settings/app-settings.defaults';
+import { AppSettingsService } from '../../domains/app-settings/app-settings.service';
 import { createQueueMessage } from '../../queues/queue-message';
 import { RabbitMqPublisherService } from '../../queues/rabbitmq-publisher.service';
 
@@ -28,6 +30,16 @@ type SendTemporaryPasswordEmailInput = {
   temporaryPassword: string;
   userId: string;
   to: string;
+};
+
+type SendDonationReceiptEmailInput = {
+  amountFormatted: string;
+  campaignTitle: string;
+  institutionName: string;
+  name: string;
+  receiptNumber: string;
+  to: string;
+  userId: string;
 };
 
 type BrandedEmailInput = {
@@ -62,7 +74,34 @@ const brand = {
 
 @Injectable()
 export class EmailJobsService {
-  constructor(private readonly rabbitMqPublisher: RabbitMqPublisherService) {}
+  constructor(
+    private readonly rabbitMqPublisher: RabbitMqPublisherService,
+    private readonly appSettingsService: AppSettingsService,
+  ) {}
+
+  private async getEmailSettings() {
+    const [
+      brandHeroUrl,
+      brandLogoUrl,
+      publicAppUrl,
+      supportEmail,
+      supportPhone,
+    ] = await Promise.all([
+      this.appSettingsService.getString(AppSettingKey.EMAIL_BRAND_HERO_URL, env.emailBrandHeroUrl),
+      this.appSettingsService.getString(AppSettingKey.EMAIL_BRAND_LOGO_URL, env.emailBrandLogoUrl),
+      this.appSettingsService.getString(AppSettingKey.EMAIL_PUBLIC_APP_URL, env.emailPublicAppUrl),
+      this.appSettingsService.getString(AppSettingKey.EMAIL_SUPPORT_EMAIL, env.emailSupportEmail),
+      this.appSettingsService.getString(AppSettingKey.EMAIL_SUPPORT_PHONE, env.emailSupportPhone),
+    ]);
+
+    return {
+      brandHeroUrl,
+      brandLogoUrl,
+      publicAppUrl,
+      supportEmail,
+      supportPhone,
+    };
+  }
 
   async sendAccountCreatedEmail(input: SendAccountCreatedEmailInput) {
     const isPendingApproval = input.accountStatus === 'pending-approval';
@@ -73,7 +112,7 @@ export class EmailJobsService {
       ? `Olá, ${input.name}. Recebemos o cadastro da sua instituição no Elodoar. Nossa equipe irá revisar as informações da instituição antes de liberar o acesso.`
       : `Olá, ${input.name}. Sua conta no Elodoar foi criada. Para acessar a plataforma, ative sua conta seguindo as instruções deste e-mail.`;
 
-    const html = this.renderBrandedEmail({
+    const html = this.renderBrandedEmail(await this.getEmailSettings(), {
       badge: isPendingApproval ? 'Cadastro recebido' : 'Conta criada',
       bodyHtml: isPendingApproval
         ? `<p>Olá, ${this.escapeHtml(input.name)}.</p><p>Recebemos o cadastro da sua instituição no Elodoar. Nossa equipe irá revisar as informações enviadas e avisaremos quando houver uma atualização.</p><p>Enquanto isso, mantenha seus dados de contato atualizados para que possamos falar com você se precisar.</p>`
@@ -132,7 +171,7 @@ export class EmailJobsService {
       createQueueMessage({
         idempotencyKey: `email:password-reset-code:${input.userId}:${input.jobId ?? 'latest'}`,
         payload: {
-          html: this.renderBrandedEmail({
+          html: this.renderBrandedEmail(await this.getEmailSettings(), {
             badge: 'Recuperação de senha',
             bodyHtml: `<p>Olá, ${this.escapeHtml(input.name)}.</p><p>Recebemos uma solicitação para recuperar o acesso à sua conta EloDoar.</p><p>Digite o código abaixo no app para confirmar que foi você. Ele expira em 15 minutos.</p>`,
             contactContext: 'Se você não solicitou essa recuperação, ignore este email ou fale com o suporte.',
@@ -165,7 +204,7 @@ export class EmailJobsService {
       createQueueMessage({
         idempotencyKey: `email:temporary-password:${input.userId}:${input.jobId ?? 'latest'}`,
         payload: {
-          html: this.renderBrandedEmail({
+          html: this.renderBrandedEmail(await this.getEmailSettings(), {
             badge: 'Senha temporária',
             bodyHtml: `<p>Olá, ${this.escapeHtml(input.name)}.</p><p>Seu código foi confirmado e criamos uma senha temporária para você acessar sua conta.</p><p>Entre no app usando a senha abaixo. Logo após o login, você será obrigado a criar uma nova senha definitiva.</p>`,
             contactContext: 'Se você não pediu a recuperação de senha, fale com o suporte imediatamente.',
@@ -190,22 +229,56 @@ export class EmailJobsService {
     );
   }
 
-  private renderBrandedEmail(input: BrandedEmailInput) {
-    const logo = env.emailBrandLogoUrl
-      ? `<img src="${this.escapeAttribute(env.emailBrandLogoUrl)}" width="56" height="56" alt="EloDoar" style="display:block;border:0;border-radius:16px;object-fit:cover;">`
+  async sendDonationReceiptEmail(input: SendDonationReceiptEmailInput) {
+    const text = `Olá, ${input.name}. Sua doação de ${input.amountFormatted} para ${input.campaignTitle} foi confirmada. Recibo: ${input.receiptNumber}.`;
+
+    await this.rabbitMqPublisher.publish(
+      'email.send',
+      createQueueMessage({
+        idempotencyKey: `email:donation-receipt:${input.receiptNumber}`,
+        payload: {
+          html: this.renderBrandedEmail(await this.getEmailSettings(), {
+            badge: 'Doação confirmada',
+            bodyHtml: `<p>Olá, ${this.escapeHtml(input.name)}.</p><p>Sua doação foi confirmada e enviada diretamente para a instituição pelo Stripe.</p><p><strong>Campanha:</strong> ${this.escapeHtml(input.campaignTitle)}<br><strong>Instituição:</strong> ${this.escapeHtml(input.institutionName)}</p>`,
+            contactContext: 'Seu recibo também ficará disponível no app.',
+            headline: 'Sua doação foi confirmada',
+            highlight: {
+              label: 'Valor doado',
+              value: input.amountFormatted,
+            },
+            preheader: `Doação confirmada: ${input.amountFormatted}.`,
+            securityNote: 'Pagamentos são processados pela Stripe. O EloDoar nunca solicita dados do cartão por email ou mensagem.',
+          }),
+          metadata: {
+            receiptNumber: input.receiptNumber,
+            template: 'donation-receipt',
+            userId: input.userId,
+          },
+          subject: 'Sua doação foi confirmada no EloDoar',
+          text,
+          to: input.to,
+        },
+        type: 'email.send',
+      }),
+    );
+  }
+
+  private renderBrandedEmail(settings: Awaited<ReturnType<EmailJobsService['getEmailSettings']>>, input: BrandedEmailInput) {
+    const logo = settings.brandLogoUrl
+      ? `<img src="${this.escapeAttribute(settings.brandLogoUrl)}" width="56" height="56" alt="EloDoar" style="display:block;border:0;border-radius:16px;object-fit:cover;">`
       : `<div style="width:56px;height:56px;border-radius:16px;background:${brand.primarySoft};color:${brand.primary};font-size:30px;line-height:56px;text-align:center;font-weight:800;">&hearts;</div>`;
-    const hero = env.emailBrandHeroUrl
-      ? `<tr><td><img src="${this.escapeAttribute(env.emailBrandHeroUrl)}" width="640" alt="Pessoas conectadas por doações" style="display:block;width:100%;max-width:640px;height:auto;border:0;"></td></tr>`
+    const hero = settings.brandHeroUrl
+      ? `<tr><td><img src="${this.escapeAttribute(settings.brandHeroUrl)}" width="640" alt="Pessoas conectadas por doações" style="display:block;width:100%;max-width:640px;height:auto;border:0;"></td></tr>`
       : '';
     const supportItems = [
-      env.emailSupportEmail
-        ? `<a href="mailto:${this.escapeAttribute(env.emailSupportEmail)}" style="color:${brand.primary};font-weight:700;text-decoration:none;">${this.escapeHtml(env.emailSupportEmail)}</a>`
+      settings.supportEmail
+        ? `<a href="mailto:${this.escapeAttribute(settings.supportEmail)}" style="color:${brand.primary};font-weight:700;text-decoration:none;">${this.escapeHtml(settings.supportEmail)}</a>`
         : '',
-      env.emailSupportPhone
-        ? `<span style="color:${brand.ink};font-weight:700;">${this.escapeHtml(env.emailSupportPhone)}</span>`
+      settings.supportPhone
+        ? `<span style="color:${brand.ink};font-weight:700;">${this.escapeHtml(settings.supportPhone)}</span>`
         : '',
-      env.emailPublicAppUrl
-        ? `<a href="${this.escapeAttribute(env.emailPublicAppUrl)}" style="color:${brand.primary};font-weight:700;text-decoration:none;">Abrir EloDoar</a>`
+      settings.publicAppUrl
+        ? `<a href="${this.escapeAttribute(settings.publicAppUrl)}" style="color:${brand.primary};font-weight:700;text-decoration:none;">Abrir EloDoar</a>`
         : '',
     ].filter(Boolean);
 

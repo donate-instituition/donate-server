@@ -1,11 +1,15 @@
 import { EmailJobsService } from './email-jobs.service';
 
 describe('EmailJobsService', () => {
+  const appSettingsService = {
+    getString: jest.fn().mockImplementation((_, fallback) => Promise.resolve(fallback)),
+  };
+
   it('publishes account created email jobs', async () => {
     const rabbitMqPublisher = {
       publish: jest.fn().mockResolvedValue(undefined),
     };
-    const service = new EmailJobsService(rabbitMqPublisher as never);
+    const service = new EmailJobsService(rabbitMqPublisher as never, appSettingsService as never);
 
     await service.sendAccountCreatedEmail({
       accountStatus: 'active',
@@ -32,7 +36,7 @@ describe('EmailJobsService', () => {
     const rabbitMqPublisher = {
       publish: jest.fn().mockResolvedValue(undefined),
     };
-    const service = new EmailJobsService(rabbitMqPublisher as never);
+    const service = new EmailJobsService(rabbitMqPublisher as never, appSettingsService as never);
 
     await service.sendPasswordResetCodeEmail({
       code: '123456',
@@ -60,7 +64,7 @@ describe('EmailJobsService', () => {
     const rabbitMqPublisher = {
       publish: jest.fn().mockResolvedValue(undefined),
     };
-    const service = new EmailJobsService(rabbitMqPublisher as never);
+    const service = new EmailJobsService(rabbitMqPublisher as never, appSettingsService as never);
 
     await service.sendTemporaryPasswordEmail({
       name: 'Ana',

@@ -12,6 +12,7 @@ import type { AuthenticatedUser } from './types/authenticated-user.type';
 describe('AuthService', () => {
   function createAuthService(overrides: {
     auditLogsService?: { create: jest.Mock };
+    appSettingsService?: Record<string, jest.Mock>;
     emailJobsService?: Record<string, jest.Mock>;
     institutionModel?: Record<string, unknown>;
     institutionStaffMembershipModel?: Record<string, unknown>;
@@ -28,6 +29,9 @@ describe('AuthService', () => {
         ...(overrides.emailJobsService ?? {}),
       } as never,
       (overrides.auditLogsService ?? { create: jest.fn().mockResolvedValue({}) }) as never,
+      (overrides.appSettingsService ?? {
+        getString: jest.fn().mockImplementation((_, fallback) => Promise.resolve(fallback)),
+      }) as never,
       (overrides.refreshTokenSessionModel ?? {}) as never,
       (overrides.passwordResetRequestModel ?? {}) as never,
       (overrides.institutionModel ?? {}) as never,
