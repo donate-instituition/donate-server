@@ -55,6 +55,53 @@ export class TaxReceipt {
         type: String,
         trim: true,
       },
+      campaignTitle: {
+        type: String,
+        trim: true,
+      },
+      donationKind: {
+        type: String,
+        trim: true,
+      },
+      grossAmount: {
+        type: Number,
+      },
+      netAmount: {
+        type: Number,
+      },
+      paymentId: {
+        type: String,
+        trim: true,
+      },
+      serviceFeeAmount: {
+        type: Number,
+      },
+      serviceFeeBps: {
+        type: Number,
+      },
+      storageBucket: {
+        type: String,
+        trim: true,
+      },
+      storageChecksum: {
+        type: String,
+        trim: true,
+      },
+      storageContentType: {
+        type: String,
+        trim: true,
+      },
+      storageObjectKey: {
+        type: String,
+        trim: true,
+      },
+      storageProvider: {
+        type: String,
+        trim: true,
+      },
+      storageSize: {
+        type: Number,
+      },
       year: {
         type: Number,
       },

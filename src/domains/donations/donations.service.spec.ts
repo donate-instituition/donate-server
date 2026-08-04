@@ -26,8 +26,44 @@ describe('DonationsService', () => {
     findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'inst-1' }) }) }),
   };
 
+  const paymentModel = {
+    findOne: jest.fn().mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'pay-1',
+            gatewayPayload: {
+              donationKind: 'single',
+              serviceFeeAmount: 250,
+              serviceFeeBps: 500,
+            },
+            status: 'PAID',
+          }),
+        }),
+      }),
+    }),
+  };
+
+  const taxReceiptModel = {
+    findOne: jest.fn().mockReturnValue({
+      lean: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          _id: 'receipt-1',
+          documentUrl: '/storage/receipts/receipt.pdf',
+          receiptNumber: 'ED-2026-00000001',
+        }),
+      }),
+    }),
+  };
+
   it('returns a donation list with the app contract', async () => {
-    const service = new DonationsService(donationModel as any, campaignModel as any, institutionModel as any);
+    const service = new DonationsService(
+      donationModel as any,
+      campaignModel as any,
+      institutionModel as any,
+      paymentModel as any,
+      taxReceiptModel as any,
+    );
 
     const donations = await service.findAll();
 
@@ -35,7 +71,13 @@ describe('DonationsService', () => {
   });
 
   it('creates a donation payload for the app', async () => {
-    const service = new DonationsService(donationModel as any, campaignModel as any, institutionModel as any);
+    const service = new DonationsService(
+      donationModel as any,
+      campaignModel as any,
+      institutionModel as any,
+      paymentModel as any,
+      taxReceiptModel as any,
+    );
 
     const response = await service.create({
       campaignId: '1',
@@ -47,6 +89,8 @@ describe('DonationsService', () => {
         donation: expect.objectContaining({
           campaignId: '1',
           amountCents: 5000,
+          serviceFeeAmount: 250,
+          netAmountCents: 4750,
         }),
       }),
     );

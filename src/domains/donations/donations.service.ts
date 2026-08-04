@@ -8,6 +8,10 @@ import { DonationDeliveryMode, DonationStatus, DonationType, DonationVisibility 
 import { CreateDonationDto } from './dto/create-donation.dto';
 import { UpdateDonationDto } from './dto/update-donation.dto';
 import { Donation, DonationDocument } from './schemas/donation.schema';
+import { PaymentStatus } from '../payments/models';
+import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
+import { TaxReceipt, TaxReceiptDocument } from '../tax-receipts/schemas/tax-receipt.schema';
+import { TaxReceiptsService } from '../tax-receipts/tax-receipts.service';
 
 @Injectable()
 export class DonationsService {
@@ -15,6 +19,8 @@ export class DonationsService {
     @InjectModel(Donation.name) private readonly donationModel: Model<DonationDocument>,
     @InjectModel(Campaign.name) private readonly campaignModel: Model<CampaignDocument>,
     @InjectModel(Institution.name) private readonly institutionModel: Model<InstitutionDocument>,
+    @InjectModel(Payment.name) private readonly paymentModel: Model<PaymentDocument>,
+    @InjectModel(TaxReceipt.name) private readonly taxReceiptModel: Model<TaxReceiptDocument>,
   ) { }
 
   private formatCurrency(value: number) {
@@ -37,19 +43,62 @@ export class DonationsService {
   }
 
   private async enrichDonation(donation: DonationDocument | any) {
-    const [campaign, institution] = await Promise.all([
+    const [campaign, institution, payment] = await Promise.all([
       this.campaignModel.findById(donation.campaignId).lean().exec(),
       this.institutionModel.findById(donation.institutionId).lean().exec(),
+      this.paymentModel
+        .findOne({ donationId: donation._id })
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec(),
     ]);
+    const receipt = payment
+      ? await this.taxReceiptModel
+        .findOne({ 'metadata.paymentId': payment._id.toString() })
+        .lean()
+        .exec()
+      : undefined;
+    const gatewayPayload = (payment?.gatewayPayload ?? {}) as Record<string, unknown>;
+    const amountCents = donation.moneyDonation?.amount
+      ? Math.round(donation.moneyDonation.amount * 100)
+      : 0;
+    const serviceFeeAmount = Number(gatewayPayload.serviceFeeAmount ?? 0);
+    const subscriptionStatus = String(gatewayPayload.subscriptionStatus ?? '');
+    const subscriptionId = gatewayPayload.subscriptionId
+      ? String(gatewayPayload.subscriptionId)
+      : undefined;
+    const subscriptionCanceledAt = gatewayPayload.subscriptionCanceledAt
+      ? String(gatewayPayload.subscriptionCanceledAt)
+      : undefined;
 
     return {
       id: donation._id?.toString() ?? donation.id,
       campaignId: donation.campaignId?.toString() ?? donation.campaignId,
       campaignTitle: campaign?.title ?? 'Campanha',
       institutionName: institution?.displayName || institution?.legalName || 'Instituição',
-      amountCents: donation.moneyDonation?.amount ? Math.round(donation.moneyDonation.amount * 100) : 0,
-      amountFormatted: this.formatCurrency(donation.moneyDonation?.amount ? Math.round(donation.moneyDonation.amount * 100) : 0),
+      amountCents,
+      amountFormatted: this.formatCurrency(amountCents),
+      donationKind: gatewayPayload.donationKind === 'monthly' ? 'monthly' : 'single',
+      netAmountCents: Math.max(amountCents - serviceFeeAmount, 0),
+      netAmountFormatted: this.formatCurrency(Math.max(amountCents - serviceFeeAmount, 0)),
+      paymentId: payment?._id?.toString(),
+      receiptId: receipt?._id?.toString(),
+      receiptNumber: receipt?.receiptNumber,
+      receiptUrl: receipt?._id
+        ? TaxReceiptsService.createPdfDownloadPath(receipt._id.toString())
+        : undefined,
+      serviceFeeAmount,
+      serviceFeeBps: Number(gatewayPayload.serviceFeeBps ?? 0),
+      serviceFeeFormatted: this.formatCurrency(serviceFeeAmount),
       status: this.toAppStatus(donation.status),
+      subscriptionCanceledAt,
+      subscriptionId,
+      subscriptionStatus:
+        subscriptionCanceledAt || subscriptionStatus === 'canceled'
+          ? 'canceled'
+          : subscriptionId && payment?.status !== PaymentStatus.FAILED
+            ? subscriptionStatus || 'active'
+            : undefined,
       createdAt: donation.createdAt?.toISOString() ?? new Date().toISOString(),
     };
   }

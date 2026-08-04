@@ -6,9 +6,14 @@ import {
   Param,
   Patch,
   Post,
+  Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { isAbsolute } from 'path';
 
 import { CreateTaxReceiptDto } from './dto/create-tax-receipt.dto';
+import { Public } from '../../auth/decorators/public.decorator';
 import { UpdateTaxReceiptDto } from './dto/update-tax-receipt.dto';
 import { TaxReceiptsService } from './tax-receipts.service';
 
@@ -24,6 +29,21 @@ export class TaxReceiptsController {
   @Get()
   findAll() {
     return this.taxReceiptsService.findAll();
+  }
+
+  @Get(':id/pdf')
+  @Public()
+  async getPdf(
+    @Param('id') id: string,
+    @Query('token') token: string | undefined,
+    @Res() response: Response,
+  ) {
+    const downloadUrl = await this.taxReceiptsService.getPdfDownloadUrl(id, token);
+    if (isAbsolute(downloadUrl)) {
+      return response.sendFile(downloadUrl);
+    }
+
+    return response.redirect(downloadUrl);
   }
 
   @Get(':id')
