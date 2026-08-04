@@ -33,6 +33,12 @@ export class Conversation {
   @Prop({ type: Types.ObjectId, ref: 'Campaign' })
   campaignId?: Types.ObjectId;
 
+  @Prop({ trim: true })
+  subjectKey?: string;
+
+  @Prop({ trim: true })
+  title?: string;
+
   @Prop()
   lastMessageAt?: Date;
 

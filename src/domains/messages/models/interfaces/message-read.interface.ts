@@ -1,4 +1,6 @@
+import { Types } from 'mongoose';
+
 export interface MessageRead {
-  userId?: string;
+  userId?: string | Types.ObjectId;
   readAt?: Date;
 }
