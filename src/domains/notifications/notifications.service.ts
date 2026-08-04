@@ -1,30 +1,90 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+
+import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
 
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
+import { Notification, type NotificationDocument } from './schemas/notification.schema';
 
 @Injectable()
 export class NotificationsService {
-  create(createNotificationDto: CreateNotificationDto) {
-    return createNotificationDto;
+  constructor(
+    @InjectModel(Notification.name)
+    private readonly notificationModel: Model<NotificationDocument>,
+  ) {}
+
+  async create(createNotificationDto: CreateNotificationDto) {
+    const notification = await this.notificationModel.create(createNotificationDto);
+    return this.serialize(notification);
   }
 
-  findAll() {
-    return [];
+  async findMine(currentUser?: AuthenticatedUser) {
+    if (!currentUser?.sub) return [];
+
+    const notifications = await this.notificationModel
+      .find({ userId: new Types.ObjectId(currentUser.sub) })
+      .sort({ createdAt: -1 })
+      .limit(80)
+      .exec();
+
+    return notifications.map((notification) => this.serialize(notification));
   }
 
-  findOne(id: string) {
+  async findAll() {
+    const notifications = await this.notificationModel
+      .find()
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .exec();
+
+    return notifications.map((notification) => this.serialize(notification));
+  }
+
+  async findOne(id: string) {
+    const notification = await this.notificationModel.findById(id).exec();
+    if (!notification) throw new NotFoundException('Notification not found');
+    return this.serialize(notification);
+  }
+
+  async markAsRead(id: string, currentUser?: AuthenticatedUser) {
+    const query = currentUser?.sub
+      ? { _id: id, userId: new Types.ObjectId(currentUser.sub) }
+      : { _id: id };
+    const notification = await this.notificationModel
+      .findOneAndUpdate(query, { $set: { readAt: new Date() } }, { new: true })
+      .exec();
+
+    if (!notification) throw new NotFoundException('Notification not found');
+    return this.serialize(notification);
+  }
+
+  async update(id: string, updateNotificationDto: UpdateNotificationDto) {
+    const notification = await this.notificationModel
+      .findByIdAndUpdate(id, updateNotificationDto, { new: true })
+      .exec();
+
+    if (!notification) throw new NotFoundException('Notification not found');
+    return this.serialize(notification);
+  }
+
+  async remove(id: string) {
+    const notification = await this.notificationModel.findByIdAndDelete(id).exec();
+    if (!notification) throw new NotFoundException('Notification not found');
     return { id };
   }
 
-  update(id: string, updateNotificationDto: UpdateNotificationDto) {
+  private serialize(notification: NotificationDocument) {
     return {
-      id,
-      ...updateNotificationDto,
+      id: notification._id.toString(),
+      userId: notification.userId.toString(),
+      type: notification.type,
+      title: notification.title,
+      body: notification.body,
+      data: notification.data,
+      readAt: notification.readAt?.toISOString(),
+      createdAt: notification.createdAt.toISOString(),
     };
-  }
-
-  remove(id: string) {
-    return { id };
   }
 }
