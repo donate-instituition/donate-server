@@ -33,3 +33,4 @@ export class PostReaction {
 }
 
 export const PostReactionSchema = SchemaFactory.createForClass(PostReaction);
+PostReactionSchema.index({ postId: 1, userId: 1 }, { unique: true });

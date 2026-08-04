@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
+import { Post as PostEntity, PostSchema } from '../posts/schemas/post.schema';
 import {
   PostReaction,
   PostReactionSchema,
@@ -11,6 +12,7 @@ import { PostReactionsService } from './post-reactions.service';
 @Module({
   imports: [
     MongooseModule.forFeature([
+      { name: PostEntity.name, schema: PostSchema },
       { name: PostReaction.name, schema: PostReactionSchema },
     ]),
   ],

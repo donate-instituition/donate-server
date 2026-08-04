@@ -3,4 +3,6 @@ export interface UserStats {
   totalDonationsCount?: number;
   followingInstitutionsCount?: number;
   followingCampaignsCount?: number;
+  followingUsersCount?: number;
+  followersCount?: number;
 }

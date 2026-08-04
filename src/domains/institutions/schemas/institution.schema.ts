@@ -158,12 +158,17 @@ export class Institution {
         type: Number,
         default: 0,
       },
+      postsCount: {
+        type: Number,
+        default: 0,
+      },
     }),
     default: {
       followersCount: 0,
       campaignsCount: 0,
       receivedDonationsCount: 0,
       receivedAmount: 0,
+      postsCount: 0,
     },
   })
   stats?: InstitutionStats;

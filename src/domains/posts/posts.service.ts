@@ -1,9 +1,28 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
-import { Follow, FollowDocument } from '../follows/schemas/follow.schema';
+import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
+import {
+  Campaign,
+  CampaignDocument,
+} from '../campaigns/schemas/campaign.schema';
 import { FollowTargetType } from '../follows/models';
+import { Follow, FollowDocument } from '../follows/schemas/follow.schema';
+import { InstitutionStaffMembershipStatus } from '../institution-staff-memberships/models';
+import {
+  InstitutionStaffMembership,
+  InstitutionStaffMembershipDocument,
+} from '../institution-staff-memberships/schemas/institution-staff-membership.schema';
+import {
+  Institution,
+  InstitutionDocument,
+} from '../institutions/schemas/institution.schema';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostAuthorType, PostVisibility } from './models';
@@ -12,8 +31,16 @@ import { Post as PostEntity, PostDocument } from './schemas/post.schema';
 @Injectable()
 export class PostsService {
   constructor(
-    @InjectModel(PostEntity.name) private readonly postModel: Model<PostDocument>,
-    @InjectModel(Follow.name) private readonly followModel: Model<FollowDocument>,
+    @InjectModel(PostEntity.name)
+    private readonly postModel: Model<PostDocument>,
+    @InjectModel(Follow.name)
+    private readonly followModel: Model<FollowDocument>,
+    @InjectModel(Campaign.name)
+    private readonly campaignModel: Model<CampaignDocument>,
+    @InjectModel(Institution.name)
+    private readonly institutionModel: Model<InstitutionDocument>,
+    @InjectModel(InstitutionStaffMembership.name)
+    private readonly staffMembershipModel: Model<InstitutionStaffMembershipDocument>,
   ) {}
 
   private toObjectId(value?: string | Types.ObjectId) {
@@ -26,9 +53,17 @@ export class PostsService {
     return new Types.ObjectId(id);
   }
 
-  private toPostResponse(post: PostDocument | any) {
+  private requireCurrentUser(currentUser?: AuthenticatedUser) {
+    if (!currentUser) {
+      throw new ForbiddenException('Authenticated user is required');
+    }
+
+    return currentUser;
+  }
+
+  private toPostResponse(post: PostDocument | PostEntity) {
     return {
-      id: post._id?.toString() ?? post.id,
+      id: post._id?.toString(),
       authorType: post.authorType,
       authorId: post.authorId?.toString(),
       campaignId: post.campaignId?.toString(),
@@ -42,27 +77,140 @@ export class PostsService {
     };
   }
 
-  async create(createPostDto: CreatePostDto) {
+  private async assertCanPostAsInstitution(
+    institutionId: Types.ObjectId,
+    userId: Types.ObjectId,
+  ) {
+    const membership = await this.staffMembershipModel
+      .findOne({
+        institutionId,
+        userId,
+        status: InstitutionStaffMembershipStatus.ACTIVE,
+      })
+      .lean()
+      .exec();
+
+    if (!membership) {
+      throw new ForbiddenException('Only active institution staff can post');
+    }
+  }
+
+  private async assertPostTargets(input: {
+    campaignId?: Types.ObjectId;
+    institutionId?: Types.ObjectId;
+  }) {
+    if (input.institutionId) {
+      const institutionExists = await this.institutionModel
+        .exists({ _id: input.institutionId })
+        .exec();
+      if (!institutionExists)
+        throw new NotFoundException('Institution not found');
+    }
+
+    if (input.campaignId) {
+      const campaign = await this.campaignModel
+        .findById(input.campaignId)
+        .select('institutionId')
+        .lean()
+        .exec();
+
+      if (!campaign) throw new NotFoundException('Campaign not found');
+
+      if (
+        input.institutionId &&
+        campaign.institutionId.toString() !== input.institutionId.toString()
+      ) {
+        throw new BadRequestException(
+          'Campaign does not belong to institution',
+        );
+      }
+    }
+  }
+
+  private async incrementPostCounters(
+    post: PostDocument | PostEntity,
+    delta: 1 | -1,
+  ) {
+    const updates: Array<Promise<unknown>> = [];
+
+    if (post.institutionId) {
+      updates.push(
+        this.institutionModel
+          .updateOne(
+            { _id: post.institutionId },
+            { $inc: { 'stats.postsCount': delta } },
+          )
+          .exec(),
+      );
+    }
+
+    if (post.campaignId) {
+      updates.push(
+        this.campaignModel
+          .updateOne(
+            { _id: post.campaignId },
+            { $inc: { 'stats.postsCount': delta } },
+          )
+          .exec(),
+      );
+    }
+
+    await Promise.all(updates);
+  }
+
+  async create(createPostDto: CreatePostDto, currentUser?: AuthenticatedUser) {
+    const user = this.requireCurrentUser(currentUser);
+    const currentUserId = this.toObjectId(user.sub);
+    const authorType = createPostDto.authorType ?? PostAuthorType.USER;
+    const institutionId = createPostDto.institutionId
+      ? this.toObjectId(createPostDto.institutionId)
+      : undefined;
+    const campaignId = createPostDto.campaignId
+      ? this.toObjectId(createPostDto.campaignId)
+      : undefined;
+    const content = createPostDto.content?.trim();
+
+    if (!content) {
+      throw new BadRequestException('Post content is required');
+    }
+
+    await this.assertPostTargets({ campaignId, institutionId });
+
+    let authorId = currentUserId;
+
+    if (authorType === PostAuthorType.INSTITUTION) {
+      if (!institutionId) {
+        throw new BadRequestException('institutionId is required');
+      }
+
+      await this.assertCanPostAsInstitution(institutionId, currentUserId);
+      authorId = institutionId;
+    }
+
     const post = await this.postModel.create({
-      ...createPostDto,
-      authorId: createPostDto.authorId ? this.toObjectId(createPostDto.authorId) : undefined,
-      campaignId: createPostDto.campaignId ? this.toObjectId(createPostDto.campaignId) : undefined,
-      institutionId: createPostDto.institutionId ? this.toObjectId(createPostDto.institutionId) : undefined,
-      visibility: createPostDto.visibility ?? PostVisibility.PUBLIC,
+      authorType,
+      authorId,
+      campaignId,
+      institutionId,
+      content,
       media: createPostDto.media ?? [],
+      visibility: createPostDto.visibility ?? PostVisibility.PUBLIC,
     });
+
+    await this.incrementPostCounters(post, 1);
 
     return this.toPostResponse(post);
   }
 
   async findAll() {
-    const posts = await this.postModel.find().sort({ createdAt: -1 }).lean().exec();
+    const posts = await this.postModel.find().sort({ createdAt: -1 }).exec();
     return posts.map((post) => this.toPostResponse(post));
   }
 
   async feed(followerUserId?: string) {
+    const userId = this.toObjectId(followerUserId);
     const follows = await this.followModel
-      .find({ followerUserId: this.toObjectId(followerUserId) })
+      .find({ followerUserId: userId })
       .lean()
       .exec();
 
@@ -72,39 +220,108 @@ export class PostsService {
     const followedCampaignIds = follows
       .filter((follow) => follow.targetType === FollowTargetType.CAMPAIGN)
       .map((follow) => follow.targetId);
+    const followedUserIds = follows
+      .filter((follow) => follow.targetType === FollowTargetType.USER)
+      .map((follow) => follow.targetId);
 
-    if (followedInstitutionIds.length === 0 && followedCampaignIds.length === 0) {
-      return [];
-    }
+    const followerOnlyConditions = [
+      { institutionId: { $in: followedInstitutionIds } },
+      { campaignId: { $in: followedCampaignIds } },
+      {
+        authorType: PostAuthorType.INSTITUTION,
+        authorId: { $in: followedInstitutionIds },
+      },
+      {
+        authorType: PostAuthorType.USER,
+        authorId: { $in: followedUserIds },
+      },
+    ];
 
     const posts = await this.postModel
       .find({
-        visibility: { $in: [PostVisibility.PUBLIC, PostVisibility.FOLLOWERS_ONLY] },
         $or: [
-          { institutionId: { $in: followedInstitutionIds } },
-          { campaignId: { $in: followedCampaignIds } },
-          { authorType: PostAuthorType.INSTITUTION, authorId: { $in: followedInstitutionIds } },
+          { visibility: PostVisibility.PUBLIC },
+          {
+            visibility: PostVisibility.FOLLOWERS_ONLY,
+            $or: followerOnlyConditions,
+          },
         ],
       })
       .sort({ createdAt: -1 })
-      .lean()
+      .limit(100)
       .exec();
 
     return posts.map((post) => this.toPostResponse(post));
   }
 
-  async findOne(id: string) {
-    const post = await this.postModel.findById(id).lean().exec();
-    return post ? this.toPostResponse(post) : null;
+  async findOne(id: string, followerUserId?: string) {
+    const post = await this.postModel.findById(id).exec();
+
+    if (!post) return null;
+
+    if (post.visibility === PostVisibility.PUBLIC) {
+      return this.toPostResponse(post);
+    }
+
+    const userId = this.toObjectId(followerUserId);
+    const followConditions = [
+      post.institutionId
+        ? {
+            targetType: FollowTargetType.INSTITUTION,
+            targetId: post.institutionId,
+          }
+        : undefined,
+      post.campaignId
+        ? { targetType: FollowTargetType.CAMPAIGN, targetId: post.campaignId }
+        : undefined,
+      post.authorType === PostAuthorType.USER
+        ? { targetType: FollowTargetType.USER, targetId: post.authorId }
+        : undefined,
+      post.authorType === PostAuthorType.INSTITUTION
+        ? { targetType: FollowTargetType.INSTITUTION, targetId: post.authorId }
+        : undefined,
+    ].filter(
+      (
+        condition,
+      ): condition is {
+        targetType: FollowTargetType;
+        targetId: Types.ObjectId;
+      } => Boolean(condition),
+    );
+
+    const canView = await this.followModel
+      .exists({
+        followerUserId: userId,
+        $or: followConditions,
+      })
+      .exec();
+
+    if (!canView) {
+      throw new ForbiddenException('You cannot view this post');
+    }
+
+    return this.toPostResponse(post);
   }
 
   async update(id: string, updatePostDto: UpdatePostDto) {
-    const post = await this.postModel.findByIdAndUpdate(id, updatePostDto, { new: true }).lean().exec();
+    const update = {
+      ...updatePostDto,
+      content: updatePostDto.content?.trim() ?? updatePostDto.content,
+    };
+    const post = await this.postModel
+      .findByIdAndUpdate(id, update, { new: true })
+      .exec();
+
     return post ? this.toPostResponse(post) : null;
   }
 
   async remove(id: string) {
-    await this.postModel.findByIdAndDelete(id).exec();
+    const post = await this.postModel.findByIdAndDelete(id).exec();
+
+    if (post) {
+      await this.incrementPostCounters(post, -1);
+    }
+
     return { id };
   }
 }

@@ -8,6 +8,8 @@ import {
   Post,
 } from '@nestjs/common';
 
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
 import { CreatePostCommentDto } from './dto/create-post-comment.dto';
 import { UpdatePostCommentDto } from './dto/update-post-comment.dto';
 import { PostCommentsService } from './post-comments.service';
@@ -17,8 +19,16 @@ export class PostCommentsController {
   constructor(private readonly postCommentsService: PostCommentsService) {}
 
   @Post()
-  create(@Body() createPostCommentDto: CreatePostCommentDto) {
-    return this.postCommentsService.create(createPostCommentDto);
+  create(
+    @Body() createPostCommentDto: CreatePostCommentDto,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.postCommentsService.create(createPostCommentDto, user?.sub);
+  }
+
+  @Get('post/:postId')
+  findByPost(@Param('postId') postId: string) {
+    return this.postCommentsService.findByPost(postId);
   }
 
   @Get()

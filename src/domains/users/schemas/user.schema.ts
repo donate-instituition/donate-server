@@ -204,12 +204,22 @@ export class User {
         type: Number,
         default: 0,
       },
+      followingUsersCount: {
+        type: Number,
+        default: 0,
+      },
+      followersCount: {
+        type: Number,
+        default: 0,
+      },
     }),
     default: {
       totalDonatedAmount: 0,
       totalDonationsCount: 0,
       followingInstitutionsCount: 0,
       followingCampaignsCount: 0,
+      followingUsersCount: 0,
+      followersCount: 0,
     },
   })
   stats?: UserStats;

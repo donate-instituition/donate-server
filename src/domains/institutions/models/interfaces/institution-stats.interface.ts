@@ -3,4 +3,5 @@ export interface InstitutionStats {
   campaignsCount?: number;
   receivedDonationsCount?: number;
   receivedAmount?: number;
+  postsCount?: number;
 }
