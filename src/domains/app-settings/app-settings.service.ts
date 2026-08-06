@@ -64,19 +64,21 @@ export class AppSettingsService implements OnModuleInit {
   async ensureDefaults() {
     await Promise.all(
       appSettingDefaults.map((setting) =>
-        this.appSettingModel.updateOne(
-          { key: setting.key },
-          {
-            $setOnInsert: {
-              description: setting.description,
-              isSecret: false,
-              key: setting.key,
-              value: setting.value,
-              valueType: setting.valueType,
+        this.appSettingModel
+          .updateOne(
+            { key: setting.key },
+            {
+              $setOnInsert: {
+                description: setting.description,
+                isSecret: false,
+                key: setting.key,
+                value: setting.value,
+                valueType: setting.valueType,
+              },
             },
-          },
-          { upsert: true },
-        ).exec(),
+            { upsert: true },
+          )
+          .exec(),
       ),
     );
   }
@@ -101,19 +103,21 @@ export class AppSettingsService implements OnModuleInit {
     const valueType = dto.valueType ?? this.inferValueType(dto.value);
     const value = this.normalizeValue(dto.value, valueType);
 
-    return this.appSettingModel.findOneAndUpdate(
-      { key },
-      {
-        $set: {
-          description: dto.description,
-          isSecret: Boolean(dto.isSecret),
-          key,
-          value,
-          valueType,
+    return this.appSettingModel
+      .findOneAndUpdate(
+        { key },
+        {
+          $set: {
+            description: dto.description,
+            isSecret: Boolean(dto.isSecret),
+            key,
+            value,
+            valueType,
+          },
         },
-      },
-      { new: true, upsert: true },
-    ).exec();
+        { returnDocument: 'after', upsert: true },
+      )
+      .exec();
   }
 
   async getString(key: AppSettingKey, fallback = '') {

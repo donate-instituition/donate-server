@@ -23,7 +23,10 @@ import {
   InstitutionStaffMembership,
   InstitutionStaffMembershipDocument,
 } from '../domains/institution-staff-memberships/schemas/institution-staff-membership.schema';
-import { InstitutionDonationType, InstitutionStatus } from '../domains/institutions/models';
+import {
+  InstitutionDonationType,
+  InstitutionStatus,
+} from '../domains/institutions/models';
 import {
   Institution,
   InstitutionDocument,
@@ -68,7 +71,7 @@ export class AuthService implements OnModuleInit {
     private readonly institutionModel: Model<InstitutionDocument>,
     @InjectModel(InstitutionStaffMembership.name)
     private readonly institutionStaffMembershipModel: Model<InstitutionStaffMembershipDocument>,
-  ) { }
+  ) {}
 
   async onModuleInit() {
     if (process.env.NODE_ENV === 'production') {
@@ -134,7 +137,8 @@ export class AuthService implements OnModuleInit {
             cnpj: '99999999000191',
             email: 'dev.instituicao@elodoar.local',
             phone: '61999990002',
-            description: 'Instituicao criada automaticamente para testes locais.',
+            description:
+              'Instituicao criada automaticamente para testes locais.',
             status: InstitutionStatus.ACTIVE,
             verification: {
               isVerified: true,
@@ -145,7 +149,7 @@ export class AuthService implements OnModuleInit {
             taxReceiptEnabled: true,
           },
         },
-        { new: true, upsert: true, setDefaultsOnInsert: true },
+        { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
       )
       .exec();
 
@@ -164,11 +168,13 @@ export class AuthService implements OnModuleInit {
             invitedByUserId: adminUser._id,
           },
         },
-        { new: true, upsert: true, setDefaultsOnInsert: true },
+        { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
       )
       .exec();
 
-    this.logger.log('Seeded dev login users: dev.doador, dev.instituicao, dev.admin');
+    this.logger.log(
+      'Seeded dev login users: dev.doador, dev.instituicao, dev.admin',
+    );
   }
 
   private toSessionUser(user: {
@@ -176,7 +182,9 @@ export class AuthService implements OnModuleInit {
     fullName?: string;
     name?: string;
     email: string;
-    roles?: Array<string | { name: string; grantedAt?: Date; grantedBy?: unknown }>;
+    roles?: Array<
+      string | { name: string; grantedAt?: Date; grantedBy?: unknown }
+    >;
     settings?: { preferredRole?: string };
     passwordChangeRequired?: boolean;
     termsAccepted?: boolean;
@@ -193,7 +201,9 @@ export class AuthService implements OnModuleInit {
       name: user.fullName ?? user.name ?? user.email,
       email: user.email,
       roles,
-      preferredRole: roles.some((role) => role.name === preferredRole) ? preferredRole : undefined,
+      preferredRole: roles.some((role) => role.name === preferredRole)
+        ? preferredRole
+        : undefined,
       passwordChangeRequired: Boolean(user.passwordChangeRequired),
       termsAccepted: Boolean(user.termsAccepted),
       acceptedTermsVersion: user.acceptedTermsVersion,
@@ -219,19 +229,30 @@ export class AuthService implements OnModuleInit {
   }
 
   private toSessionRoleGrants(user: {
-    roles?: Array<string | { name: string; grantedAt?: Date; grantedBy?: unknown }>;
+    roles?: Array<
+      string | { name: string; grantedAt?: Date; grantedBy?: unknown }
+    >;
   }) {
     const rawRoles = user.roles?.length ? user.roles : [UserRole.DONOR];
     const mappedRoles = rawRoles.map((role) => ({
       name: this.toSessionRole(this.getRoleName(role)),
-      grantedAt: typeof role === 'string' ? new Date().toISOString() : role.grantedAt?.toISOString?.() ?? new Date().toISOString(),
-      grantedBy: typeof role === 'string'
-        ? { source: 'SYSTEM', label: 'sistema' }
-        : role.grantedBy ?? { source: 'SYSTEM', label: 'sistema' },
+      grantedAt:
+        typeof role === 'string'
+          ? new Date().toISOString()
+          : (role.grantedAt?.toISOString?.() ?? new Date().toISOString()),
+      grantedBy:
+        typeof role === 'string'
+          ? { source: 'SYSTEM', label: 'sistema' }
+          : (role.grantedBy ?? { source: 'SYSTEM', label: 'sistema' }),
     }));
     const roleNames = mappedRoles.map((role) => role.name);
 
-    if (rawRoles.map((role) => this.getRoleName(role)).includes(UserRole.PLATFORM_ADMIN) && !roleNames.includes('donor')) {
+    if (
+      rawRoles
+        .map((role) => this.getRoleName(role))
+        .includes(UserRole.PLATFORM_ADMIN) &&
+      !roleNames.includes('donor')
+    ) {
       mappedRoles.push({
         name: 'donor',
         grantedAt: new Date().toISOString(),
@@ -239,7 +260,12 @@ export class AuthService implements OnModuleInit {
       });
     }
 
-    if (rawRoles.map((role) => this.getRoleName(role)).includes(UserRole.INSTITUTION_STAFF) && !roleNames.includes('donor')) {
+    if (
+      rawRoles
+        .map((role) => this.getRoleName(role))
+        .includes(UserRole.INSTITUTION_STAFF) &&
+      !roleNames.includes('donor')
+    ) {
       mappedRoles.push({
         name: 'donor',
         grantedAt: new Date().toISOString(),
@@ -247,7 +273,10 @@ export class AuthService implements OnModuleInit {
       });
     }
 
-    return mappedRoles.filter((role, index, all) => all.findIndex((item) => item.name === role.name) === index);
+    return mappedRoles.filter(
+      (role, index, all) =>
+        all.findIndex((item) => item.name === role.name) === index,
+    );
   }
 
   private createAccessToken(user: {
@@ -302,10 +331,14 @@ export class AuthService implements OnModuleInit {
         .lean()
         .exec();
 
-      for (const session of tokenMatches as Array<RefreshTokenSession & { _id: Types.ObjectId }>) {
+      for (const session of tokenMatches as Array<
+        RefreshTokenSession & { _id: Types.ObjectId }
+      >) {
         const matches = await compare(refreshToken, session.refreshTokenHash);
         if (matches) {
-          await this.refreshTokenSessionModel.findByIdAndUpdate(session._id, { revokedAt: new Date() }).exec();
+          await this.refreshTokenSessionModel
+            .findByIdAndUpdate(session._id, { revokedAt: new Date() })
+            .exec();
           return true;
         }
       }
@@ -314,7 +347,10 @@ export class AuthService implements OnModuleInit {
 
     if (userId) {
       await this.refreshTokenSessionModel
-        .updateMany({ userId: new Types.ObjectId(userId), revokedAt: { $exists: false } }, { revokedAt: new Date() })
+        .updateMany(
+          { userId: new Types.ObjectId(userId), revokedAt: { $exists: false } },
+          { revokedAt: new Date() },
+        )
         .exec();
       return true;
     }
@@ -323,13 +359,21 @@ export class AuthService implements OnModuleInit {
   }
 
   private toApiRoles(user: { roles?: Array<string | { name: string }> }) {
-    const roles = user.roles?.length ? user.roles.map((role) => this.getRoleName(role)) : [UserRole.DONOR];
+    const roles = user.roles?.length
+      ? user.roles.map((role) => this.getRoleName(role))
+      : [UserRole.DONOR];
 
-    if (roles.includes(UserRole.PLATFORM_ADMIN) && !roles.includes(UserRole.DONOR)) {
+    if (
+      roles.includes(UserRole.PLATFORM_ADMIN) &&
+      !roles.includes(UserRole.DONOR)
+    ) {
       roles.push(UserRole.DONOR);
     }
 
-    if (roles.includes(UserRole.INSTITUTION_STAFF) && !roles.includes(UserRole.DONOR)) {
+    if (
+      roles.includes(UserRole.INSTITUTION_STAFF) &&
+      !roles.includes(UserRole.DONOR)
+    ) {
       roles.push(UserRole.DONOR);
     }
 
@@ -383,7 +427,9 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Institution access is not active');
     }
 
-    const institutionIds = memberships.map((membership) => membership.institutionId);
+    const institutionIds = memberships.map(
+      (membership) => membership.institutionId,
+    );
     const approvedInstitution = await this.institutionModel
       .findOne({
         _id: { $in: institutionIds },
@@ -394,7 +440,9 @@ export class AuthService implements OnModuleInit {
       .exec();
 
     if (!approvedInstitution) {
-      throw new UnauthorizedException('Institution registration is pending approval');
+      throw new UnauthorizedException(
+        'Institution registration is pending approval',
+      );
     }
   }
 
@@ -495,7 +543,9 @@ export class AuthService implements OnModuleInit {
       const orphanInstitutionStaff =
         accountType === 'INSTITUTION' &&
         this.toApiRoles(existingUser).includes(UserRole.INSTITUTION_STAFF) &&
-        !(await this.institutionStaffMembershipModel.exists({ userId: existingUser._id }).exec());
+        !(await this.institutionStaffMembershipModel
+          .exists({ userId: existingUser._id })
+          .exec());
 
       if (!orphanInstitutionStaff) {
         throw new ConflictException('Email already registered');
@@ -505,14 +555,17 @@ export class AuthService implements OnModuleInit {
       existingUser = null;
     }
 
-    const normalizedCnpj = registerDto.institutionCnpj?.replace(/\D/g, '') ?? '';
+    const normalizedCnpj =
+      registerDto.institutionCnpj?.replace(/\D/g, '') ?? '';
 
     if (accountType === 'INSTITUTION') {
       if (!normalizedCnpj) {
         throw new BadRequestException('Institution CNPJ is required');
       }
 
-      const existingInstitution = await this.institutionModel.findOne({ cnpj: normalizedCnpj }).exec();
+      const existingInstitution = await this.institutionModel
+        .findOne({ cnpj: normalizedCnpj })
+        .exec();
 
       if (existingInstitution) {
         throw new ConflictException('Institution CNPJ already registered');
@@ -523,7 +576,9 @@ export class AuthService implements OnModuleInit {
       fullName: registerDto.name,
       email: normalizedEmail,
       cpf: registerDto.cpf,
-      birthDate: registerDto.birthDate ? new Date(registerDto.birthDate) : undefined,
+      birthDate: registerDto.birthDate
+        ? new Date(registerDto.birthDate)
+        : undefined,
       phone: registerDto.phone,
       passwordHash: await hash(registerDto.password, 10),
       roles:
@@ -542,11 +597,21 @@ export class AuthService implements OnModuleInit {
     try {
       if (accountType === 'INSTITUTION') {
         const institution = await this.institutionModel.create({
-          legalName: registerDto.institutionLegalName?.trim() || registerDto.institutionDisplayName?.trim() || registerDto.name,
-          displayName: registerDto.institutionDisplayName?.trim() || registerDto.institutionLegalName?.trim() || registerDto.name,
+          legalName:
+            registerDto.institutionLegalName?.trim() ||
+            registerDto.institutionDisplayName?.trim() ||
+            registerDto.name,
+          displayName:
+            registerDto.institutionDisplayName?.trim() ||
+            registerDto.institutionLegalName?.trim() ||
+            registerDto.name,
           cnpj: normalizedCnpj,
-          email: (registerDto.institutionEmail || normalizedEmail).trim().toLowerCase(),
-          phone: registerDto.institutionPhone?.replace(/\D/g, '') || registerDto.phone,
+          email: (registerDto.institutionEmail || normalizedEmail)
+            .trim()
+            .toLowerCase(),
+          phone:
+            registerDto.institutionPhone?.replace(/\D/g, '') ||
+            registerDto.phone,
           description: registerDto.institutionDescription,
           website: registerDto.institutionWebsite,
           status: InstitutionStatus.PENDING_APPROVAL,
@@ -621,7 +686,10 @@ export class AuthService implements OnModuleInit {
     let payload: { sub: string; type?: string };
 
     try {
-      payload = verify(refreshToken, env.jwtSecret) as { sub: string; type?: string };
+      payload = verify(refreshToken, env.jwtSecret) as {
+        sub: string;
+        type?: string;
+      };
     } catch {
       throw new UnauthorizedException('Refresh token is invalid');
     }
@@ -766,7 +834,10 @@ export class AuthService implements OnModuleInit {
     return { message: 'Logged out successfully' };
   }
 
-  async updateMySettings(user: AuthenticatedUser | undefined, body: UpdateMySettingsDto) {
+  async updateMySettings(
+    user: AuthenticatedUser | undefined,
+    body: UpdateMySettingsDto,
+  ) {
     if (!user) {
       throw new UnauthorizedException('Authentication token is missing');
     }
@@ -775,7 +846,10 @@ export class AuthService implements OnModuleInit {
       throw new BadRequestException('Preferred role is required');
     }
 
-    const updatedUser = await this.usersService.updatePreferredRole(user.sub, body.preferredRole);
+    const updatedUser = await this.usersService.updatePreferredRole(
+      user.sub,
+      body.preferredRole,
+    );
 
     if (!updatedUser) {
       throw new UnauthorizedException('Authentication token is invalid');
@@ -883,7 +957,10 @@ export class AuthService implements OnModuleInit {
       resetRequest.status = PasswordResetRequestStatus.Used;
       resetRequest.usedAt = new Date();
       await resetRequest.save();
-      return { message: 'Se o código estiver correto, enviaremos uma senha temporária por e-mail.' };
+      return {
+        message:
+          'Se o código estiver correto, enviaremos uma senha temporária por e-mail.',
+      };
     }
 
     const temporaryPassword = this.generateTemporaryPassword();
@@ -914,18 +991,25 @@ export class AuthService implements OnModuleInit {
     return { message: 'Enviamos uma senha temporária para seu e-mail.' };
   }
 
-  async changePassword(user: AuthenticatedUser | undefined, body: { currentPassword: string; newPassword: string }) {
+  async changePassword(
+    user: AuthenticatedUser | undefined,
+    body: { currentPassword: string; newPassword: string },
+  ) {
     if (!user) {
       throw new UnauthorizedException('Authentication token is missing');
     }
 
     if (!body.currentPassword || !body.newPassword) {
-      throw new BadRequestException('Current password and new password are required');
+      throw new BadRequestException(
+        'Current password and new password are required',
+      );
     }
     assertPasswordPolicy(body.newPassword);
 
     if (body.currentPassword === body.newPassword) {
-      throw new BadRequestException('New password must be different from current password');
+      throw new BadRequestException(
+        'New password must be different from current password',
+      );
     }
 
     const existingUser = await this.usersService.findOne(user.sub);
@@ -934,16 +1018,22 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Authentication token is invalid');
     }
 
-    const passwordMatches = await compare(body.currentPassword, existingUser.passwordHash);
+    const passwordMatches = await compare(
+      body.currentPassword,
+      existingUser.passwordHash,
+    );
 
     if (!passwordMatches) {
       throw new UnauthorizedException('Current password is invalid');
     }
 
-    const updatedUser = await this.usersService.update(existingUser._id.toString(), {
-      passwordChangeRequired: false,
-      passwordHash: await hash(body.newPassword, 10),
-    });
+    const updatedUser = await this.usersService.update(
+      existingUser._id.toString(),
+      {
+        passwordChangeRequired: false,
+        passwordHash: await hash(body.newPassword, 10),
+      },
+    );
 
     if (!updatedUser) {
       throw new UnauthorizedException('Authentication token is invalid');
@@ -984,24 +1074,27 @@ export class AuthService implements OnModuleInit {
   }) {
     try {
       const activationTokenVersion =
-        input.accountStatus === 'pending-verification' ? randomUUID() : undefined;
+        input.accountStatus === 'pending-verification'
+          ? randomUUID()
+          : undefined;
       if (activationTokenVersion) {
-        await this.usersService.update(input.userId, { activationTokenVersion });
+        await this.usersService.update(input.userId, {
+          activationTokenVersion,
+        });
       }
 
       await this.emailJobsService.sendAccountCreatedEmail({
         accountStatus: input.accountStatus,
-        activationUrl:
-          activationTokenVersion
-            ? createAccountActivationUrl(
-                input.userId,
-                activationTokenVersion,
-                await this.appSettingsService.getString(
-                  AppSettingKey.EMAIL_ACCOUNT_ACTIVATION_URL,
-                  env.emailAccountActivationUrl,
-                ),
-              )
-            : undefined,
+        activationUrl: activationTokenVersion
+          ? createAccountActivationUrl(
+              input.userId,
+              activationTokenVersion,
+              await this.appSettingsService.getString(
+                AppSettingKey.EMAIL_ACCOUNT_ACTIVATION_URL,
+                env.emailAccountActivationUrl,
+              ),
+            )
+          : undefined,
         name: input.name,
         to: input.email,
         userId: input.userId,

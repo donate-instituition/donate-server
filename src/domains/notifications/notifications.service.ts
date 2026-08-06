@@ -6,7 +6,10 @@ import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type
 
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
-import { Notification, type NotificationDocument } from './schemas/notification.schema';
+import {
+  Notification,
+  type NotificationDocument,
+} from './schemas/notification.schema';
 
 @Injectable()
 export class NotificationsService {
@@ -16,7 +19,9 @@ export class NotificationsService {
   ) {}
 
   async create(createNotificationDto: CreateNotificationDto) {
-    const notification = await this.notificationModel.create(createNotificationDto);
+    const notification = await this.notificationModel.create(
+      createNotificationDto,
+    );
     return this.serialize(notification);
   }
 
@@ -53,7 +58,11 @@ export class NotificationsService {
       ? { _id: id, userId: new Types.ObjectId(currentUser.sub) }
       : { _id: id };
     const notification = await this.notificationModel
-      .findOneAndUpdate(query, { $set: { readAt: new Date() } }, { new: true })
+      .findOneAndUpdate(
+        query,
+        { $set: { readAt: new Date() } },
+        { returnDocument: 'after' },
+      )
       .exec();
 
     if (!notification) throw new NotFoundException('Notification not found');
@@ -62,7 +71,7 @@ export class NotificationsService {
 
   async update(id: string, updateNotificationDto: UpdateNotificationDto) {
     const notification = await this.notificationModel
-      .findByIdAndUpdate(id, updateNotificationDto, { new: true })
+      .findByIdAndUpdate(id, updateNotificationDto, { returnDocument: 'after' })
       .exec();
 
     if (!notification) throw new NotFoundException('Notification not found');
@@ -70,7 +79,9 @@ export class NotificationsService {
   }
 
   async remove(id: string) {
-    const notification = await this.notificationModel.findByIdAndDelete(id).exec();
+    const notification = await this.notificationModel
+      .findByIdAndDelete(id)
+      .exec();
     if (!notification) throw new NotFoundException('Notification not found');
     return { id };
   }

@@ -432,7 +432,7 @@ export class ConversationsService {
 
   async update(id: string, updateConversationDto: UpdateConversationDto) {
     const conversation = await this.conversationModel
-      .findByIdAndUpdate(id, updateConversationDto, { new: true })
+      .findByIdAndUpdate(id, updateConversationDto, { returnDocument: 'after' })
       .lean()
       .exec();
 

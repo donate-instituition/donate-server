@@ -96,7 +96,7 @@ export class PostReactionsService {
 
   async update(id: string, updatePostReactionDto: UpdatePostReactionDto) {
     const reaction = await this.postReactionModel
-      .findByIdAndUpdate(id, updatePostReactionDto, { new: true })
+      .findByIdAndUpdate(id, updatePostReactionDto, { returnDocument: 'after' })
       .exec();
 
     return reaction ? this.toReactionResponse(reaction) : null;

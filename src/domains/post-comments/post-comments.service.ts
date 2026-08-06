@@ -116,7 +116,7 @@ export class PostCommentsService {
       .findByIdAndUpdate(
         id,
         { ...updatePostCommentDto, content },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .exec();
 

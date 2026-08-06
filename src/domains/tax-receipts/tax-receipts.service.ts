@@ -1,6 +1,10 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import PDFDocument from 'pdfkit';
@@ -8,11 +12,23 @@ import PDFDocument from 'pdfkit';
 import { env } from '../../config/env';
 import { EmailJobsService } from '../../notifications/email/email-jobs.service';
 import { ObjectStorageService } from '../../storage/object-storage.service';
-import { Campaign, CampaignDocument } from '../campaigns/schemas/campaign.schema';
-import { Donation, DonationDocument } from '../donations/schemas/donation.schema';
-import { Institution, InstitutionDocument } from '../institutions/schemas/institution.schema';
+import {
+  Campaign,
+  CampaignDocument,
+} from '../campaigns/schemas/campaign.schema';
+import {
+  Donation,
+  DonationDocument,
+} from '../donations/schemas/donation.schema';
+import {
+  Institution,
+  InstitutionDocument,
+} from '../institutions/schemas/institution.schema';
 import { NotificationType } from '../notifications/models';
-import { Notification, NotificationDocument } from '../notifications/schemas/notification.schema';
+import {
+  Notification,
+  NotificationDocument,
+} from '../notifications/schemas/notification.schema';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { TaxReceiptType } from './models';
@@ -34,13 +50,19 @@ export class TaxReceiptsService {
   }
 
   constructor(
-    @InjectModel(TaxReceipt.name) private readonly taxReceiptModel: Model<TaxReceiptDocument>,
-    @InjectModel(Donation.name) private readonly donationModel: Model<DonationDocument>,
-    @InjectModel(Payment.name) private readonly paymentModel: Model<PaymentDocument>,
-    @InjectModel(Campaign.name) private readonly campaignModel: Model<CampaignDocument>,
-    @InjectModel(Institution.name) private readonly institutionModel: Model<InstitutionDocument>,
+    @InjectModel(TaxReceipt.name)
+    private readonly taxReceiptModel: Model<TaxReceiptDocument>,
+    @InjectModel(Donation.name)
+    private readonly donationModel: Model<DonationDocument>,
+    @InjectModel(Payment.name)
+    private readonly paymentModel: Model<PaymentDocument>,
+    @InjectModel(Campaign.name)
+    private readonly campaignModel: Model<CampaignDocument>,
+    @InjectModel(Institution.name)
+    private readonly institutionModel: Model<InstitutionDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectModel(Notification.name) private readonly notificationModel: Model<NotificationDocument>,
+    @InjectModel(Notification.name)
+    private readonly notificationModel: Model<NotificationDocument>,
     private readonly emailJobsService: EmailJobsService,
     private readonly objectStorage: ObjectStorageService,
   ) {}
@@ -68,7 +90,9 @@ export class TaxReceiptsService {
   }
 
   update(id: string, updateTaxReceiptDto: UpdateTaxReceiptDto) {
-    return this.taxReceiptModel.findByIdAndUpdate(id, updateTaxReceiptDto, { new: true }).exec();
+    return this.taxReceiptModel
+      .findByIdAndUpdate(id, updateTaxReceiptDto, { returnDocument: 'after' })
+      .exec();
   }
 
   remove(id: string) {
@@ -115,7 +139,9 @@ export class TaxReceiptsService {
     ]);
 
     if (!donation || !payment) {
-      throw new NotFoundException('Donation or payment not found for receipt generation');
+      throw new NotFoundException(
+        'Donation or payment not found for receipt generation',
+      );
     }
 
     const [campaign, institution, donor] = await Promise.all([
@@ -125,11 +151,16 @@ export class TaxReceiptsService {
     ]);
 
     if (!institution || !donor) {
-      throw new NotFoundException('Institution or donor not found for receipt generation');
+      throw new NotFoundException(
+        'Institution or donor not found for receipt generation',
+      );
     }
 
-    const serviceFeeAmount = Number((payment.gatewayPayload as any)?.serviceFeeAmount ?? 0) / 100;
-    const serviceFeeBps = Number((payment.gatewayPayload as any)?.serviceFeeBps ?? 0);
+    const serviceFeeAmount =
+      Number((payment.gatewayPayload as any)?.serviceFeeAmount ?? 0) / 100;
+    const serviceFeeBps = Number(
+      (payment.gatewayPayload as any)?.serviceFeeBps ?? 0,
+    );
     const grossAmount = payment.amount / 100;
     const netAmount = Math.max(grossAmount - serviceFeeAmount, 0);
     const receiptNumber = `ED-${new Date().getFullYear()}-${payment._id.toString().slice(-8).toUpperCase()}`;
@@ -147,8 +178,11 @@ export class TaxReceiptsService {
         issuedAt: new Date(),
         metadata: {
           campaignTitle: campaign?.title ?? 'Campanha',
-          donationKind: (payment.gatewayPayload as any)?.donationKind ?? 'single',
-          donorCpfMasked: donor.cpf ? `***.${donor.cpf.slice(-6, -3)}.${donor.cpf.slice(-3)}` : undefined,
+          donationKind:
+            (payment.gatewayPayload as any)?.donationKind ?? 'single',
+          donorCpfMasked: donor.cpf
+            ? `***.${donor.cpf.slice(-6, -3)}.${donor.cpf.slice(-3)}`
+            : undefined,
           grossAmount,
           institutionCnpj: institution.cnpj,
           netAmount,
@@ -173,7 +207,9 @@ export class TaxReceiptsService {
       serviceFeeBps,
     });
 
-    receipt.documentUrl = TaxReceiptsService.createPdfDownloadPath(receipt._id.toString());
+    receipt.documentUrl = TaxReceiptsService.createPdfDownloadPath(
+      receipt._id.toString(),
+    );
     receipt.metadata = {
       ...(receipt.metadata ?? {}),
       storageBucket: storedObject.bucket,
@@ -241,15 +277,23 @@ export class TaxReceiptsService {
       doc.moveDown();
 
       doc.fontSize(12);
-      doc.text(`Valor pago pelo doador: ${this.formatCurrency(input.grossAmount)}`);
-      doc.text(`Taxa de serviço EloDoar: ${this.formatCurrency(input.serviceFeeAmount)} (${(input.serviceFeeBps / 100).toFixed(2).replace('.', ',')}%)`);
-      doc.text(`Valor destinado à instituição: ${this.formatCurrency(input.netAmount)}`);
+      doc.text(
+        `Valor pago pelo doador: ${this.formatCurrency(input.grossAmount)}`,
+      );
+      doc.text(
+        `Taxa de serviço EloDoar: ${this.formatCurrency(input.serviceFeeAmount)} (${(input.serviceFeeBps / 100).toFixed(2).replace('.', ',')}%)`,
+      );
+      doc.text(
+        `Valor destinado à instituição: ${this.formatCurrency(input.netAmount)}`,
+      );
       doc.moveDown();
 
       doc
         .fontSize(10)
         .fillColor('#5E6E68')
-        .text('Pagamento processado pela Stripe. A doação é destinada diretamente à conta conectada da instituição, com retenção da taxa de serviço da plataforma quando aplicável.');
+        .text(
+          'Pagamento processado pela Stripe. A doação é destinada diretamente à conta conectada da instituição, com retenção da taxa de serviço da plataforma quando aplicável.',
+        );
 
       doc.end();
     });
@@ -272,23 +316,25 @@ export class TaxReceiptsService {
     },
   ) {
     if (donor.settings?.notifications?.push !== false) {
-      await this.notificationModel.updateOne(
-        { 'data.receiptNumber': receipt.receiptNumber },
-        {
-          $setOnInsert: {
-            body: `Sua doação para ${input.campaignTitle} foi confirmada.`,
-            data: {
-              donationId: receipt.donationId.toString(),
-              receiptId: receipt._id.toString(),
-              receiptNumber: receipt.receiptNumber,
+      await this.notificationModel
+        .updateOne(
+          { 'data.receiptNumber': receipt.receiptNumber },
+          {
+            $setOnInsert: {
+              body: `Sua doação para ${input.campaignTitle} foi confirmada.`,
+              data: {
+                donationId: receipt.donationId.toString(),
+                receiptId: receipt._id.toString(),
+                receiptNumber: receipt.receiptNumber,
+              },
+              title: 'Doação confirmada',
+              type: NotificationType.DONATION_STATUS_UPDATED,
+              userId: receipt.donorUserId,
             },
-            title: 'Doação confirmada',
-            type: NotificationType.DONATION_STATUS_UPDATED,
-            userId: receipt.donorUserId,
           },
-        },
-        { upsert: true },
-      ).exec();
+          { upsert: true },
+        )
+        .exec();
     }
 
     if (donor.settings?.notifications?.email !== false) {

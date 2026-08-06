@@ -16,7 +16,7 @@ export enum AppSettingValueType {
   versionKey: false,
 })
 export class AppSetting {
-  @Prop({ required: true, trim: true, unique: true })
+  @Prop({ required: true, trim: true })
   key!: string;
 
   @Prop({ required: true, type: String, enum: AppSettingValueType })

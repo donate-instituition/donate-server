@@ -2,9 +2,19 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
-import { InstitutionDonationType, InstitutionStatus } from '../institutions/models';
-import { Institution, InstitutionDocument } from '../institutions/schemas/institution.schema';
-import { CampaignStatus, CampaignDonationType, CampaignVisibility } from './models';
+import {
+  InstitutionDonationType,
+  InstitutionStatus,
+} from '../institutions/models';
+import {
+  Institution,
+  InstitutionDocument,
+} from '../institutions/schemas/institution.schema';
+import {
+  CampaignStatus,
+  CampaignDonationType,
+  CampaignVisibility,
+} from './models';
 import { Campaign, CampaignDocument } from './schemas/campaign.schema';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
@@ -12,9 +22,11 @@ import { UpdateCampaignDto } from './dto/update-campaign.dto';
 @Injectable()
 export class CampaignsService {
   constructor(
-    @InjectModel(Campaign.name) private readonly campaignModel: Model<CampaignDocument>,
-    @InjectModel(Institution.name) private readonly institutionModel: Model<InstitutionDocument>,
-  ) { }
+    @InjectModel(Campaign.name)
+    private readonly campaignModel: Model<CampaignDocument>,
+    @InjectModel(Institution.name)
+    private readonly institutionModel: Model<InstitutionDocument>,
+  ) {}
 
   private formatCurrency(value: number) {
     return `R$ ${(value / 100).toFixed(2).replace('.', ',')}`;
@@ -29,11 +41,13 @@ export class CampaignsService {
       OTHER: 'Outros',
     };
 
-    return category ? categoryMap[category] ?? 'Outros' : 'Outros';
+    return category ? (categoryMap[category] ?? 'Outros') : 'Outros';
   }
 
   private mapCategory(campaign: CampaignDocument) {
-    return this.toAppCategory(campaign?.acceptedItems?.[0]?.category?.toString());
+    return this.toAppCategory(
+      campaign?.acceptedItems?.[0]?.category?.toString(),
+    );
   }
 
   private toAppLocation(location?: { coordinates?: unknown }) {
@@ -52,24 +66,39 @@ export class CampaignsService {
     return { latitude, longitude };
   }
 
-  private resolveCampaignLocation(campaign: CampaignDocument | any, institution?: InstitutionDocument | any) {
+  private resolveCampaignLocation(
+    campaign: CampaignDocument | any,
+    institution?: InstitutionDocument | any,
+  ) {
     return (
       this.toAppLocation(campaign?.address?.location) ??
       this.toAppLocation(institution?.address?.location)
     );
   }
 
-  private toAppCampaign(campaign: CampaignDocument | any, institution?: InstitutionDocument | any) {
+  private toAppCampaign(
+    campaign: CampaignDocument | any,
+    institution?: InstitutionDocument | any,
+  ) {
     const goalCents = Number(campaign?.goal?.moneyTarget ?? 0) * 100;
     const raisedCents = Number(campaign?.progress?.moneyRaised ?? 0) * 100;
-    const progress = goalCents > 0 ? Math.min(100, Math.round((raisedCents / goalCents) * 100)) : 0;
-    const active = campaign?.status === CampaignStatus.PUBLISHED && (!campaign?.endAt || new Date(campaign.endAt) >= new Date());
+    const progress =
+      goalCents > 0
+        ? Math.min(100, Math.round((raisedCents / goalCents) * 100))
+        : 0;
+    const active =
+      campaign?.status === CampaignStatus.PUBLISHED &&
+      (!campaign?.endAt || new Date(campaign.endAt) >= new Date());
     const location = this.resolveCampaignLocation(campaign, institution);
 
     return {
       id: campaign._id?.toString() ?? campaign.id,
       title: campaign.title,
-      institution: institution?.displayName ?? institution?.legalName ?? campaign.institutionName ?? 'Instituição',
+      institution:
+        institution?.displayName ??
+        institution?.legalName ??
+        campaign.institutionName ??
+        'Instituição',
       institutionId: campaign.institutionId?.toString() ?? '',
       category: this.mapCategory(campaign),
       goalFormatted: this.formatCurrency(goalCents),
@@ -78,8 +107,12 @@ export class CampaignsService {
       raisedCents,
       progress,
       active,
-      endsAt: campaign.endAt ? new Date(campaign.endAt).toISOString().slice(0, 10) : undefined,
-      acceptsRecurringDonations: Boolean(institution?.acceptsRecurringDonations),
+      endsAt: campaign.endAt
+        ? new Date(campaign.endAt).toISOString().slice(0, 10)
+        : undefined,
+      acceptsRecurringDonations: Boolean(
+        institution?.acceptsRecurringDonations,
+      ),
       location,
     };
   }
@@ -91,7 +124,9 @@ export class CampaignsService {
       return;
     }
 
-    const institutionCount = await this.institutionModel.countDocuments().exec();
+    const institutionCount = await this.institutionModel
+      .countDocuments()
+      .exec();
 
     if (institutionCount === 0) {
       await this.institutionModel.create([
@@ -100,7 +135,8 @@ export class CampaignsService {
           displayName: 'Educação Viva',
           cnpj: '00000000000100',
           email: 'contato@educacaoviva.org.br',
-          description: 'Promovemos acesso à educação de qualidade para crianças em situação de vulnerabilidade.',
+          description:
+            'Promovemos acesso à educação de qualidade para crianças em situação de vulnerabilidade.',
           status: InstitutionStatus.ACTIVE,
           verification: { isVerified: true },
           address: {
@@ -116,7 +152,8 @@ export class CampaignsService {
           displayName: 'Lar Aconchego',
           cnpj: '00000000000200',
           email: 'contato@laraconchego.org.br',
-          description: 'Distribuímos cestas básicas e refeições para famílias em insegurança alimentar.',
+          description:
+            'Distribuímos cestas básicas e refeições para famílias em insegurança alimentar.',
           status: InstitutionStatus.ACTIVE,
           verification: { isVerified: true },
           address: {
@@ -131,12 +168,18 @@ export class CampaignsService {
     }
 
     const institutions = await this.institutionModel.find().lean().exec();
-    const institutionMap = new Map(institutions.map((institution) => [institution._id.toString(), institution]));
+    const institutionMap = new Map(
+      institutions.map((institution) => [
+        institution._id.toString(),
+        institution,
+      ]),
+    );
 
     const seedCampaigns = [
       {
         title: 'Material Escolar 2026',
-        description: 'Campanha para fornecer material escolar completo para crianças de periferia.',
+        description:
+          'Campanha para fornecer material escolar completo para crianças de periferia.',
         institutionId: institutions[0]?._id,
         createdByUserId: new Types.ObjectId(),
         status: CampaignStatus.PUBLISHED,
@@ -148,7 +191,8 @@ export class CampaignsService {
       },
       {
         title: 'Cestas de Inverno',
-        description: 'Distribuímos cestas básicas para famílias em insegurança alimentar.',
+        description:
+          'Distribuímos cestas básicas para famílias em insegurança alimentar.',
         institutionId: institutions[1]?._id ?? institutions[0]?._id,
         createdByUserId: new Types.ObjectId(),
         status: CampaignStatus.PUBLISHED,
@@ -171,7 +215,11 @@ export class CampaignsService {
 
   async findAll() {
     await this.ensureSeedData();
-    const campaigns = await this.campaignModel.find().sort({ createdAt: -1 }).lean().exec();
+    const campaigns = await this.campaignModel
+      .find()
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
     const institutionIds = campaigns
       .map((campaign) => campaign.institutionId?.toString())
       .filter((value): value is string => Boolean(value));
@@ -179,10 +227,18 @@ export class CampaignsService {
       .find({ _id: { $in: institutionIds } })
       .lean()
       .exec();
-    const institutionMap = new Map(institutions.map((institution) => [institution._id.toString(), institution]));
+    const institutionMap = new Map(
+      institutions.map((institution) => [
+        institution._id.toString(),
+        institution,
+      ]),
+    );
 
     return campaigns.map((campaign) =>
-      this.toAppCampaign(campaign, institutionMap.get(campaign.institutionId?.toString() ?? '')),
+      this.toAppCampaign(
+        campaign,
+        institutionMap.get(campaign.institutionId?.toString() ?? ''),
+      ),
     );
   }
 
@@ -194,18 +250,24 @@ export class CampaignsService {
       throw new NotFoundException(`Campanha ${id} não encontrada.`);
     }
 
-    const institution = await this.institutionModel.findById(campaign.institutionId).lean().exec();
+    const institution = await this.institutionModel
+      .findById(campaign.institutionId)
+      .lean()
+      .exec();
 
     return {
       ...this.toAppCampaign(campaign, institution),
-      description: campaign.description ?? 'Descrição da campanha indisponível.',
+      description:
+        campaign.description ?? 'Descrição da campanha indisponível.',
       donorsCount: campaign.stats?.donationsCount ?? 0,
       itemsNeeded: campaign.acceptedItems?.map((item: any) => item.name) ?? [],
     };
   }
 
   update(id: string, updateCampaignDto: UpdateCampaignDto) {
-    return this.campaignModel.findByIdAndUpdate(id, updateCampaignDto, { new: true }).exec();
+    return this.campaignModel
+      .findByIdAndUpdate(id, updateCampaignDto, { returnDocument: 'after' })
+      .exec();
   }
 
   remove(id: string) {

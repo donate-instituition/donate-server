@@ -309,7 +309,7 @@ export class PostsService {
       content: updatePostDto.content?.trim() ?? updatePostDto.content,
     };
     const post = await this.postModel
-      .findByIdAndUpdate(id, update, { new: true })
+      .findByIdAndUpdate(id, update, { returnDocument: 'after' })
       .exec();
 
     return post ? this.toPostResponse(post) : null;

@@ -16,7 +16,7 @@ export enum StripeWebhookEventStatus {
   versionKey: false,
 })
 export class StripeWebhookEvent {
-  @Prop({ required: true, trim: true, unique: true })
+  @Prop({ required: true, trim: true })
   eventId!: string;
 
   @Prop({ required: true, trim: true })
@@ -47,5 +47,6 @@ export class StripeWebhookEvent {
   updatedAt!: Date;
 }
 
-export const StripeWebhookEventSchema = SchemaFactory.createForClass(StripeWebhookEvent);
+export const StripeWebhookEventSchema =
+  SchemaFactory.createForClass(StripeWebhookEvent);
 StripeWebhookEventSchema.index({ eventId: 1 }, { unique: true });

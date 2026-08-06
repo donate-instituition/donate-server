@@ -1,27 +1,50 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
-import { Campaign, CampaignDocument } from '../campaigns/schemas/campaign.schema';
-import { Institution, InstitutionDocument } from '../institutions/schemas/institution.schema';
-import { DonationDeliveryMode, DonationStatus, DonationType, DonationVisibility } from './models';
+import {
+  Campaign,
+  CampaignDocument,
+} from '../campaigns/schemas/campaign.schema';
+import {
+  Institution,
+  InstitutionDocument,
+} from '../institutions/schemas/institution.schema';
+import {
+  DonationDeliveryMode,
+  DonationStatus,
+  DonationType,
+  DonationVisibility,
+} from './models';
 import { CreateDonationDto } from './dto/create-donation.dto';
 import { UpdateDonationDto } from './dto/update-donation.dto';
 import { Donation, DonationDocument } from './schemas/donation.schema';
 import { PaymentStatus } from '../payments/models';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
-import { TaxReceipt, TaxReceiptDocument } from '../tax-receipts/schemas/tax-receipt.schema';
+import {
+  TaxReceipt,
+  TaxReceiptDocument,
+} from '../tax-receipts/schemas/tax-receipt.schema';
 import { TaxReceiptsService } from '../tax-receipts/tax-receipts.service';
 
 @Injectable()
 export class DonationsService {
   constructor(
-    @InjectModel(Donation.name) private readonly donationModel: Model<DonationDocument>,
-    @InjectModel(Campaign.name) private readonly campaignModel: Model<CampaignDocument>,
-    @InjectModel(Institution.name) private readonly institutionModel: Model<InstitutionDocument>,
-    @InjectModel(Payment.name) private readonly paymentModel: Model<PaymentDocument>,
-    @InjectModel(TaxReceipt.name) private readonly taxReceiptModel: Model<TaxReceiptDocument>,
-  ) { }
+    @InjectModel(Donation.name)
+    private readonly donationModel: Model<DonationDocument>,
+    @InjectModel(Campaign.name)
+    private readonly campaignModel: Model<CampaignDocument>,
+    @InjectModel(Institution.name)
+    private readonly institutionModel: Model<InstitutionDocument>,
+    @InjectModel(Payment.name)
+    private readonly paymentModel: Model<PaymentDocument>,
+    @InjectModel(TaxReceipt.name)
+    private readonly taxReceiptModel: Model<TaxReceiptDocument>,
+  ) {}
 
   private formatCurrency(value: number) {
     return `R$ ${(value / 100).toFixed(2).replace('.', ',')}`;
@@ -39,7 +62,7 @@ export class DonationsService {
       FAILED: 'failed',
     };
 
-    return status ? statusMap[status] ?? 'pending' : 'pending';
+    return status ? (statusMap[status] ?? 'pending') : 'pending';
   }
 
   private async enrichDonation(donation: DonationDocument | any) {
@@ -54,11 +77,14 @@ export class DonationsService {
     ]);
     const receipt = payment
       ? await this.taxReceiptModel
-        .findOne({ 'metadata.paymentId': payment._id.toString() })
-        .lean()
-        .exec()
+          .findOne({ 'metadata.paymentId': payment._id.toString() })
+          .lean()
+          .exec()
       : undefined;
-    const gatewayPayload = (payment?.gatewayPayload ?? {}) as Record<string, unknown>;
+    const gatewayPayload = (payment?.gatewayPayload ?? {}) as Record<
+      string,
+      unknown
+    >;
     const amountCents = donation.moneyDonation?.amount
       ? Math.round(donation.moneyDonation.amount * 100)
       : 0;
@@ -75,12 +101,16 @@ export class DonationsService {
       id: donation._id?.toString() ?? donation.id,
       campaignId: donation.campaignId?.toString() ?? donation.campaignId,
       campaignTitle: campaign?.title ?? 'Campanha',
-      institutionName: institution?.displayName || institution?.legalName || 'Instituição',
+      institutionName:
+        institution?.displayName || institution?.legalName || 'Instituição',
       amountCents,
       amountFormatted: this.formatCurrency(amountCents),
-      donationKind: gatewayPayload.donationKind === 'monthly' ? 'monthly' : 'single',
+      donationKind:
+        gatewayPayload.donationKind === 'monthly' ? 'monthly' : 'single',
       netAmountCents: Math.max(amountCents - serviceFeeAmount, 0),
-      netAmountFormatted: this.formatCurrency(Math.max(amountCents - serviceFeeAmount, 0)),
+      netAmountFormatted: this.formatCurrency(
+        Math.max(amountCents - serviceFeeAmount, 0),
+      ),
       paymentId: payment?._id?.toString(),
       receiptId: receipt?._id?.toString(),
       receiptNumber: receipt?.receiptNumber,
@@ -149,10 +179,14 @@ export class DonationsService {
       }
     };
 
-    const amountCents = createDonationDto.amountCents ?? (
-      createDonationDto.moneyDonation?.amount ? Math.round(createDonationDto.moneyDonation.amount * 100) : 0
-    );
-    const campaignId = createDonationDto.campaignId ? toObjectId(createDonationDto.campaignId.toString()) : undefined;
+    const amountCents =
+      createDonationDto.amountCents ??
+      (createDonationDto.moneyDonation?.amount
+        ? Math.round(createDonationDto.moneyDonation.amount * 100)
+        : 0);
+    const campaignId = createDonationDto.campaignId
+      ? toObjectId(createDonationDto.campaignId.toString())
+      : undefined;
 
     if (!campaignId) {
       throw new BadRequestException('campaignId is required');
@@ -162,10 +196,15 @@ export class DonationsService {
       throw new BadRequestException('amountCents must be greater than zero');
     }
 
-    const campaign = await this.campaignModel.findById(campaignId).lean().exec();
+    const campaign = await this.campaignModel
+      .findById(campaignId)
+      .lean()
+      .exec();
 
     if (!campaign) {
-      throw new NotFoundException(`Campanha ${createDonationDto.campaignId} não encontrada.`);
+      throw new NotFoundException(
+        `Campanha ${createDonationDto.campaignId} não encontrada.`,
+      );
     }
 
     const donation = await this.donationModel.create({
@@ -194,15 +233,29 @@ export class DonationsService {
 
   async findAll() {
     await this.ensureSeedData();
-    const donations = await this.donationModel.find().sort({ createdAt: -1 }).lean().exec();
-    return Promise.all(donations.map((donation) => this.enrichDonation(donation)));
+    const donations = await this.donationModel
+      .find()
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+    return Promise.all(
+      donations.map((donation) => this.enrichDonation(donation)),
+    );
   }
 
   async findMyDonations(donorUserId?: string) {
     await this.ensureSeedData();
-    const query = donorUserId ? { donorUserId: new Types.ObjectId(donorUserId) } : {};
-    const donations = await this.donationModel.find(query).sort({ createdAt: -1 }).lean().exec();
-    return Promise.all(donations.map((donation) => this.enrichDonation(donation)));
+    const query = donorUserId
+      ? { donorUserId: new Types.ObjectId(donorUserId) }
+      : {};
+    const donations = await this.donationModel
+      .find(query)
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+    return Promise.all(
+      donations.map((donation) => this.enrichDonation(donation)),
+    );
   }
 
   async findOne(id: string) {
@@ -217,7 +270,9 @@ export class DonationsService {
   }
 
   update(id: string, updateDonationDto: UpdateDonationDto) {
-    return this.donationModel.findByIdAndUpdate(id, updateDonationDto, { new: true }).exec();
+    return this.donationModel
+      .findByIdAndUpdate(id, updateDonationDto, { returnDocument: 'after' })
+      .exec();
   }
 
   remove(id: string) {

@@ -14,10 +14,24 @@ import { RabbitMqPublisherService } from '../../queues/rabbitmq-publisher.servic
 import { createQueueMessage } from '../../queues/queue-message';
 import { AppSettingKey } from '../app-settings/app-settings.defaults';
 import { AppSettingsService } from '../app-settings/app-settings.service';
-import { Campaign, CampaignDocument } from '../campaigns/schemas/campaign.schema';
-import { DonationStatus, DonationDeliveryMode, DonationType, DonationVisibility } from '../donations/models';
-import { Donation, DonationDocument } from '../donations/schemas/donation.schema';
-import { Institution, InstitutionDocument } from '../institutions/schemas/institution.schema';
+import {
+  Campaign,
+  CampaignDocument,
+} from '../campaigns/schemas/campaign.schema';
+import {
+  DonationStatus,
+  DonationDeliveryMode,
+  DonationType,
+  DonationVisibility,
+} from '../donations/models';
+import {
+  Donation,
+  DonationDocument,
+} from '../donations/schemas/donation.schema';
+import {
+  Institution,
+  InstitutionDocument,
+} from '../institutions/schemas/institution.schema';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreateStripePaymentIntentDto } from './dto/create-stripe-payment-intent.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
@@ -35,12 +49,16 @@ export class PaymentsService {
   private stripeClient?: Stripe;
 
   constructor(
-    @InjectModel(Payment.name) private readonly paymentModel: Model<PaymentDocument>,
+    @InjectModel(Payment.name)
+    private readonly paymentModel: Model<PaymentDocument>,
     @InjectModel(StripeWebhookEvent.name)
     private readonly stripeWebhookEventModel: Model<StripeWebhookEventDocument>,
-    @InjectModel(Donation.name) private readonly donationModel: Model<DonationDocument>,
-    @InjectModel(Campaign.name) private readonly campaignModel: Model<CampaignDocument>,
-    @InjectModel(Institution.name) private readonly institutionModel: Model<InstitutionDocument>,
+    @InjectModel(Donation.name)
+    private readonly donationModel: Model<DonationDocument>,
+    @InjectModel(Campaign.name)
+    private readonly campaignModel: Model<CampaignDocument>,
+    @InjectModel(Institution.name)
+    private readonly institutionModel: Model<InstitutionDocument>,
     private readonly rabbitMqPublisher: RabbitMqPublisherService,
     private readonly appSettingsService: AppSettingsService,
   ) {}
@@ -61,7 +79,7 @@ export class PaymentsService {
       FAILED: 'failed',
     };
 
-    return status ? statusMap[status] ?? 'pending' : 'pending';
+    return status ? (statusMap[status] ?? 'pending') : 'pending';
   }
 
   private toObjectId(value?: string) {
@@ -103,7 +121,9 @@ export class PaymentsService {
     paymentIntent: string | Stripe.PaymentIntent | null | undefined,
   ) {
     if (!paymentIntent || typeof paymentIntent === 'string') {
-      throw new ServiceUnavailableException('Stripe did not return a payment intent.');
+      throw new ServiceUnavailableException(
+        'Stripe did not return a payment intent.',
+      );
     }
 
     return paymentIntent;
@@ -142,7 +162,9 @@ export class PaymentsService {
     }
 
     if (serviceFeeBps >= 10_000) {
-      throw new ServiceUnavailableException('Invalid Stripe service fee configuration.');
+      throw new ServiceUnavailableException(
+        'Invalid Stripe service fee configuration.',
+      );
     }
 
     return Math.floor((amountCents * serviceFeeBps) / 10_000);
@@ -154,7 +176,9 @@ export class PaymentsService {
     }
 
     if (serviceFeeBps >= 10_000) {
-      throw new ServiceUnavailableException('Invalid Stripe service fee configuration.');
+      throw new ServiceUnavailableException(
+        'Invalid Stripe service fee configuration.',
+      );
     }
 
     return serviceFeeBps / 100;
@@ -164,7 +188,9 @@ export class PaymentsService {
     stripeConnectAccountId?: string,
   ): asserts stripeConnectAccountId is string {
     if (!stripeConnectAccountId) {
-      throw new BadRequestException('Institution does not have a Stripe connected account.');
+      throw new BadRequestException(
+        'Institution does not have a Stripe connected account.',
+      );
     }
 
     if (
@@ -191,11 +217,13 @@ export class PaymentsService {
       id: donation._id?.toString() ?? donation.id,
       campaignId: donation.campaignId?.toString() ?? donation.campaignId,
       campaignTitle: campaign?.title ?? 'Campanha',
-      institutionName: institution?.displayName || institution?.legalName || 'Instituição',
+      institutionName:
+        institution?.displayName || institution?.legalName || 'Instituição',
       amountCents,
       amountFormatted: this.formatCurrency(amountCents),
       status: this.toAppDonationStatus(donation.status),
-      createdAt: donation.createdAt?.toISOString?.() ?? new Date().toISOString(),
+      createdAt:
+        donation.createdAt?.toISOString?.() ?? new Date().toISOString(),
     };
   }
 
@@ -212,7 +240,9 @@ export class PaymentsService {
   }
 
   update(id: string, updatePaymentDto: UpdatePaymentDto) {
-    return this.paymentModel.findByIdAndUpdate(id, updatePaymentDto, { new: true }).exec();
+    return this.paymentModel
+      .findByIdAndUpdate(id, updatePaymentDto, { returnDocument: 'after' })
+      .exec();
   }
 
   remove(id: string) {
@@ -233,13 +263,19 @@ export class PaymentsService {
     }
 
     const campaignId = this.toObjectId(dto.campaignId);
-    const campaign = await this.campaignModel.findById(campaignId).lean().exec();
+    const campaign = await this.campaignModel
+      .findById(campaignId)
+      .lean()
+      .exec();
 
     if (!campaign) {
       throw new NotFoundException(`Campanha ${dto.campaignId} não encontrada.`);
     }
 
-    const institution = await this.institutionModel.findById(campaign.institutionId).lean().exec();
+    const institution = await this.institutionModel
+      .findById(campaign.institutionId)
+      .lean()
+      .exec();
 
     if (!institution) {
       throw new NotFoundException('Instituição da campanha não encontrada.');
@@ -248,11 +284,18 @@ export class PaymentsService {
     this.assertValidStripeConnectAccountId(institution.stripeConnectAccountId);
     const stripeConnectAccountId = institution.stripeConnectAccountId;
 
-    if (dto.donationKind === 'monthly' && !institution.acceptsRecurringDonations) {
-      throw new BadRequestException('Institution does not accept recurring donations.');
+    if (
+      dto.donationKind === 'monthly' &&
+      !institution.acceptsRecurringDonations
+    ) {
+      throw new BadRequestException(
+        'Institution does not accept recurring donations.',
+      );
     }
 
-    const donorId = donorUserId ? this.toObjectId(donorUserId) : new Types.ObjectId();
+    const donorId = donorUserId
+      ? this.toObjectId(donorUserId)
+      : new Types.ObjectId();
     const donation = await this.donationModel.create({
       donorUserId: donorId,
       institutionId: campaign.institutionId,
@@ -260,7 +303,10 @@ export class PaymentsService {
       type: DonationType.MONEY,
       status: DonationStatus.PENDING_PAYMENT,
       visibility: DonationVisibility.PUBLIC,
-      moneyDonation: { amount: dto.amountCents / 100, currency: env.stripeCurrency.toUpperCase() },
+      moneyDonation: {
+        amount: dto.amountCents / 100,
+        currency: env.stripeCurrency.toUpperCase(),
+      },
       deliveryMode: DonationDeliveryMode.INSTANT_ONLINE,
       receiptEligible: true,
     });
@@ -274,7 +320,10 @@ export class PaymentsService {
       institutionId: campaign.institutionId.toString(),
     };
     const serviceFeeBps = await this.getServiceFeeBps();
-    const serviceFeeAmount = this.getServiceFeeAmount(dto.amountCents, serviceFeeBps);
+    const serviceFeeAmount = this.getServiceFeeAmount(
+      dto.amountCents,
+      serviceFeeBps,
+    );
     const serviceFeePercent = this.getServiceFeePercent(serviceFeeBps);
     let paymentIntent: Stripe.PaymentIntent;
     let subscriptionId: string | undefined;
@@ -287,7 +336,9 @@ export class PaymentsService {
             donorUserId: donorId.toString(),
           },
         },
-        idempotencyKey ? { idempotencyKey: `customer:${idempotencyKey}` } : undefined,
+        idempotencyKey
+          ? { idempotencyKey: `customer:${idempotencyKey}` }
+          : undefined,
       );
       const price = await stripe.prices.create(
         {
@@ -300,7 +351,9 @@ export class PaymentsService {
           },
           unit_amount: dto.amountCents,
         },
-        idempotencyKey ? { idempotencyKey: `price:${idempotencyKey}` } : undefined,
+        idempotencyKey
+          ? { idempotencyKey: `price:${idempotencyKey}` }
+          : undefined,
       );
       const subscription = await stripe.subscriptions.create(
         {
@@ -317,19 +370,24 @@ export class PaymentsService {
           },
           expand: ['latest_invoice.payment_intent'],
         },
-        idempotencyKey ? { idempotencyKey: `subscription:${idempotencyKey}` } : undefined,
+        idempotencyKey
+          ? { idempotencyKey: `subscription:${idempotencyKey}` }
+          : undefined,
       );
       const latestInvoice = subscription.latest_invoice as Stripe.Invoice & {
         payment_intent?: string | Stripe.PaymentIntent | null;
       };
-      paymentIntent = this.normalizeStripePaymentIntent(latestInvoice.payment_intent);
+      paymentIntent = this.normalizeStripePaymentIntent(
+        latestInvoice.payment_intent,
+      );
       subscriptionId = subscription.id;
     } else {
       paymentIntent = await stripe.paymentIntents.create(
         {
           amount: dto.amountCents,
           currency: env.stripeCurrency,
-          application_fee_amount: serviceFeeAmount > 0 ? serviceFeeAmount : undefined,
+          application_fee_amount:
+            serviceFeeAmount > 0 ? serviceFeeAmount : undefined,
           automatic_payment_methods: {
             enabled: true,
           },
@@ -340,7 +398,9 @@ export class PaymentsService {
             destination: stripeConnectAccountId,
           },
         },
-        idempotencyKey ? { idempotencyKey: `payment-intent:${idempotencyKey}` } : undefined,
+        idempotencyKey
+          ? { idempotencyKey: `payment-intent:${idempotencyKey}` }
+          : undefined,
       );
     }
 
@@ -381,17 +441,26 @@ export class PaymentsService {
 
   async confirmStripePaymentIntent(paymentIntentId: string) {
     const payment = await this.paymentModel
-      .findOne({ gateway: PaymentGateway.STRIPE, gatewayTransactionId: paymentIntentId })
+      .findOne({
+        gateway: PaymentGateway.STRIPE,
+        gatewayTransactionId: paymentIntentId,
+      })
       .exec();
 
     if (!payment) {
-      throw new NotFoundException(`Pagamento ${paymentIntentId} não encontrado.`);
+      throw new NotFoundException(
+        `Pagamento ${paymentIntentId} não encontrado.`,
+      );
     }
 
-    const donation = await this.donationModel.findById(payment.donationId).exec();
+    const donation = await this.donationModel
+      .findById(payment.donationId)
+      .exec();
 
     if (!donation) {
-      throw new NotFoundException(`Doação ${payment.donationId.toString()} não encontrada.`);
+      throw new NotFoundException(
+        `Doação ${payment.donationId.toString()} não encontrada.`,
+      );
     }
 
     return {
@@ -399,8 +468,12 @@ export class PaymentsService {
       payment: {
         id: payment._id.toString(),
         paymentIntentId,
-        serviceFeeAmount: Number((payment.gatewayPayload as any)?.serviceFeeAmount ?? 0),
-        serviceFeeBps: Number((payment.gatewayPayload as any)?.serviceFeeBps ?? 0),
+        serviceFeeAmount: Number(
+          (payment.gatewayPayload as any)?.serviceFeeAmount ?? 0,
+        ),
+        serviceFeeBps: Number(
+          (payment.gatewayPayload as any)?.serviceFeeBps ?? 0,
+        ),
         status: payment.status,
         subscriptionId: (payment.gatewayPayload as any)?.subscriptionId,
       },
@@ -417,11 +490,15 @@ export class PaymentsService {
       .exec();
 
     if (!payment) {
-      throw new NotFoundException(`Assinatura ${subscriptionId} não encontrada.`);
+      throw new NotFoundException(
+        `Assinatura ${subscriptionId} não encontrada.`,
+      );
     }
 
     if (donorUserId && payment.donorUserId.toString() !== donorUserId) {
-      throw new BadRequestException('Subscription does not belong to the current user.');
+      throw new BadRequestException(
+        'Subscription does not belong to the current user.',
+      );
     }
 
     const stripe = this.getStripeClient();
@@ -463,32 +540,42 @@ export class PaymentsService {
         throw new BadRequestException('Missing Stripe webhook signature.');
       }
 
-      event = stripe.webhooks.constructEvent(rawBody, signature, env.stripeWebhookSecret);
+      event = stripe.webhooks.constructEvent(
+        rawBody,
+        signature,
+        env.stripeWebhookSecret,
+      );
     } else {
       event = parsedBody as Stripe.Event;
     }
 
     if (env.stripeSecretKey.startsWith('sk_test_') && event.livemode) {
-      throw new BadRequestException('Live Stripe event received while using test API keys.');
+      throw new BadRequestException(
+        'Live Stripe event received while using test API keys.',
+      );
     }
 
     if (env.stripeSecretKey.startsWith('sk_live_') && !event.livemode) {
-      throw new BadRequestException('Test Stripe event received while using live API keys.');
+      throw new BadRequestException(
+        'Test Stripe event received while using live API keys.',
+      );
     }
 
-    await this.stripeWebhookEventModel.updateOne(
-      { eventId: event.id },
-      {
-        $setOnInsert: {
-          eventId: event.id,
-          livemode: Boolean(event.livemode),
-          payload: event,
-          status: StripeWebhookEventStatus.QUEUED,
-          type: event.type,
+    await this.stripeWebhookEventModel
+      .updateOne(
+        { eventId: event.id },
+        {
+          $setOnInsert: {
+            eventId: event.id,
+            livemode: Boolean(event.livemode),
+            payload: event,
+            status: StripeWebhookEventStatus.QUEUED,
+            type: event.type,
+          },
         },
-      },
-      { upsert: true },
-    ).exec();
+        { upsert: true },
+      )
+      .exec();
 
     await this.rabbitMqPublisher.publish(
       'stripe.webhook',

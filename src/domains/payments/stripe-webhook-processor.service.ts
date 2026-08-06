@@ -12,11 +12,24 @@ import Stripe from 'stripe';
 import { env } from '../../config/env';
 import { AppSettingKey } from '../app-settings/app-settings.defaults';
 import { AppSettingsService } from '../app-settings/app-settings.service';
-import { Campaign, CampaignDocument } from '../campaigns/schemas/campaign.schema';
+import {
+  Campaign,
+  CampaignDocument,
+} from '../campaigns/schemas/campaign.schema';
 import { DonationStatus } from '../donations/models';
-import { DonationDeliveryMode, DonationType, DonationVisibility } from '../donations/models';
-import { Donation, DonationDocument } from '../donations/schemas/donation.schema';
-import { Institution, InstitutionDocument } from '../institutions/schemas/institution.schema';
+import {
+  DonationDeliveryMode,
+  DonationType,
+  DonationVisibility,
+} from '../donations/models';
+import {
+  Donation,
+  DonationDocument,
+} from '../donations/schemas/donation.schema';
+import {
+  Institution,
+  InstitutionDocument,
+} from '../institutions/schemas/institution.schema';
 import { createQueueMessage } from '../../queues/queue-message';
 import type { QueueMessage } from '../../queues/queue-message';
 import { RabbitMqPublisherService } from '../../queues/rabbitmq-publisher.service';
@@ -34,7 +47,9 @@ type StripeWebhookJobPayload = {
 };
 
 @Injectable()
-export class StripeWebhookProcessorService implements OnModuleInit, OnApplicationShutdown {
+export class StripeWebhookProcessorService
+  implements OnModuleInit, OnApplicationShutdown
+{
   private readonly logger = new Logger(StripeWebhookProcessorService.name);
   private channel?: Channel;
   private connection?: ChannelModel;
@@ -43,44 +58,62 @@ export class StripeWebhookProcessorService implements OnModuleInit, OnApplicatio
   constructor(
     @InjectModel(StripeWebhookEvent.name)
     private readonly stripeWebhookEventModel: Model<StripeWebhookEventDocument>,
-    @InjectModel(Payment.name) private readonly paymentModel: Model<PaymentDocument>,
-    @InjectModel(Donation.name) private readonly donationModel: Model<DonationDocument>,
-    @InjectModel(Campaign.name) private readonly campaignModel: Model<CampaignDocument>,
-    @InjectModel(Institution.name) private readonly institutionModel: Model<InstitutionDocument>,
+    @InjectModel(Payment.name)
+    private readonly paymentModel: Model<PaymentDocument>,
+    @InjectModel(Donation.name)
+    private readonly donationModel: Model<DonationDocument>,
+    @InjectModel(Campaign.name)
+    private readonly campaignModel: Model<CampaignDocument>,
+    @InjectModel(Institution.name)
+    private readonly institutionModel: Model<InstitutionDocument>,
     private readonly appSettingsService: AppSettingsService,
     private readonly rabbitMqPublisher: RabbitMqPublisherService,
   ) {}
 
   async onModuleInit() {
     if (!env.rabbitmqUrl) {
-      this.logger.warn('RabbitMQ is not configured; Stripe webhook jobs will not be consumed.');
+      this.logger.warn(
+        'RabbitMQ is not configured; Stripe webhook jobs will not be consumed.',
+      );
       return;
     }
 
-    const connection = await connect(env.rabbitmqUrl);
-    const channel = await connection.createChannel();
-    this.connection = connection;
-    this.channel = channel;
+    try {
+      const connection = await connect(env.rabbitmqUrl);
+      const channel = await connection.createChannel();
+      this.connection = connection;
+      this.channel = channel;
 
-    await channel.assertExchange(env.rabbitmqExchange, 'direct', { durable: true });
-    const queue = 'stripe.webhook';
-    await channel.assertQueue(queue, { durable: true });
-    await channel.bindQueue(queue, env.rabbitmqExchange, 'stripe.webhook');
-    await channel.prefetch(5);
-    await channel.consume(queue, async (message) => {
-      if (!message) return;
+      await channel.assertExchange(env.rabbitmqExchange, 'direct', {
+        durable: true,
+      });
+      const queue = 'stripe.webhook';
+      await channel.assertQueue(queue, { durable: true });
+      await channel.bindQueue(queue, env.rabbitmqExchange, 'stripe.webhook');
+      await channel.prefetch(5);
+      await channel.consume(queue, async (message) => {
+        if (!message) return;
 
-      try {
-        const job = JSON.parse(message.content.toString()) as QueueMessage<StripeWebhookJobPayload>;
-        await this.processQueuedEvent(job.payload.eventId);
-        channel.ack(message);
-      } catch (error) {
-        this.logger.error(
-          `Failed to process Stripe webhook job: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        channel.nack(message, false, true);
-      }
-    });
+        try {
+          const job = JSON.parse(
+            message.content.toString(),
+          ) as QueueMessage<StripeWebhookJobPayload>;
+          await this.processQueuedEvent(job.payload.eventId);
+          channel.ack(message);
+        } catch (error) {
+          this.logger.error(
+            `Failed to process Stripe webhook job: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          channel.nack(message, false, true);
+        }
+      });
+    } catch (error) {
+      this.logger.warn(
+        `RabbitMQ is unavailable; Stripe webhook jobs will not be consumed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   async onApplicationShutdown() {
@@ -89,22 +122,26 @@ export class StripeWebhookProcessorService implements OnModuleInit, OnApplicatio
   }
 
   async processQueuedEvent(eventId: string) {
-    const eventRecord = await this.stripeWebhookEventModel.findOneAndUpdate(
-      {
-        eventId,
-        status: { $ne: StripeWebhookEventStatus.PROCESSED },
-      },
-      {
-        $set: {
-          status: StripeWebhookEventStatus.PROCESSING,
-          lastError: undefined,
+    const eventRecord = await this.stripeWebhookEventModel
+      .findOneAndUpdate(
+        {
+          eventId,
+          status: { $ne: StripeWebhookEventStatus.PROCESSED },
         },
-      },
-      { new: true },
-    ).exec();
+        {
+          $set: {
+            status: StripeWebhookEventStatus.PROCESSING,
+            lastError: undefined,
+          },
+        },
+        { returnDocument: 'after' },
+      )
+      .exec();
 
     if (!eventRecord) {
-      this.logger.debug(`Stripe webhook event ${eventId} already processed or not found.`);
+      this.logger.debug(
+        `Stripe webhook event ${eventId} already processed or not found.`,
+      );
       return;
     }
 
@@ -119,26 +156,34 @@ export class StripeWebhookProcessorService implements OnModuleInit, OnApplicatio
       );
 
       if (event.type === 'payment_intent.succeeded') {
-        await this.handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
+        await this.handlePaymentIntentSucceeded(
+          event.data.object as Stripe.PaymentIntent,
+        );
       }
 
       if (
         event.type === 'payment_intent.payment_failed' ||
         event.type === 'payment_intent.canceled'
       ) {
-        await this.handlePaymentIntentTerminalFailure(event.data.object as Stripe.PaymentIntent);
+        await this.handlePaymentIntentTerminalFailure(
+          event.data.object as Stripe.PaymentIntent,
+        );
       }
 
       if (event.type === 'invoice.payment_succeeded') {
-        await this.handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
+        await this.handleInvoicePaymentSucceeded(
+          event.data.object as Stripe.Invoice,
+        );
       }
 
-      await this.stripeWebhookEventModel.findByIdAndUpdate(eventRecord._id, {
-        $set: {
-          status: StripeWebhookEventStatus.PROCESSED,
-          processedAt: new Date(),
-        },
-      }).exec();
+      await this.stripeWebhookEventModel
+        .findByIdAndUpdate(eventRecord._id, {
+          $set: {
+            status: StripeWebhookEventStatus.PROCESSED,
+            processedAt: new Date(),
+          },
+        })
+        .exec();
       this.logger.log(
         JSON.stringify({
           event: 'stripe_webhook_processed',
@@ -147,17 +192,21 @@ export class StripeWebhookProcessorService implements OnModuleInit, OnApplicatio
         }),
       );
     } catch (error) {
-      await this.stripeWebhookEventModel.findByIdAndUpdate(eventRecord._id, {
-        $set: {
-          status: StripeWebhookEventStatus.FAILED,
-          lastError: error instanceof Error ? error.message : String(error),
-        },
-      }).exec();
+      await this.stripeWebhookEventModel
+        .findByIdAndUpdate(eventRecord._id, {
+          $set: {
+            status: StripeWebhookEventStatus.FAILED,
+            lastError: error instanceof Error ? error.message : String(error),
+          },
+        })
+        .exec();
       throw error;
     }
   }
 
-  private async handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
+  private async handlePaymentIntentSucceeded(
+    paymentIntent: Stripe.PaymentIntent,
+  ) {
     const payment = await this.paymentModel
       .findOne({ gatewayTransactionId: paymentIntent.id })
       .exec();
@@ -183,7 +232,9 @@ export class StripeWebhookProcessorService implements OnModuleInit, OnApplicatio
       return;
     }
 
-    const donation = await this.donationModel.findById(payment.donationId).exec();
+    const donation = await this.donationModel
+      .findById(payment.donationId)
+      .exec();
 
     if (!donation) {
       throw new Error(`Donation ${payment.donationId.toString()} not found`);
@@ -201,12 +252,14 @@ export class StripeWebhookProcessorService implements OnModuleInit, OnApplicatio
     donation.status = DonationStatus.PAID;
     await donation.save();
 
-    await this.campaignModel.findByIdAndUpdate(donation.campaignId, {
-      $inc: {
-        'progress.moneyRaised': payment.amount / 100,
-        'stats.donationsCount': 1,
-      },
-    }).exec();
+    await this.campaignModel
+      .findByIdAndUpdate(donation.campaignId, {
+        $inc: {
+          'progress.moneyRaised': payment.amount / 100,
+          'stats.donationsCount': 1,
+        },
+      })
+      .exec();
 
     this.logger.log(
       JSON.stringify({
@@ -217,10 +270,15 @@ export class StripeWebhookProcessorService implements OnModuleInit, OnApplicatio
       }),
     );
 
-    await this.queueReceiptGeneration(donation._id.toString(), payment._id.toString());
+    await this.queueReceiptGeneration(
+      donation._id.toString(),
+      payment._id.toString(),
+    );
   }
 
-  private async handlePaymentIntentTerminalFailure(paymentIntent: Stripe.PaymentIntent) {
+  private async handlePaymentIntentTerminalFailure(
+    paymentIntent: Stripe.PaymentIntent,
+  ) {
     const payment = await this.paymentModel
       .findOne({ gatewayTransactionId: paymentIntent.id })
       .exec();
@@ -229,9 +287,13 @@ export class StripeWebhookProcessorService implements OnModuleInit, OnApplicatio
       return;
     }
 
-    const donation = await this.donationModel.findById(payment.donationId).exec();
+    const donation = await this.donationModel
+      .findById(payment.donationId)
+      .exec();
     const nextStatus =
-      paymentIntent.status === 'canceled' ? PaymentStatus.CANCELED : PaymentStatus.FAILED;
+      paymentIntent.status === 'canceled'
+        ? PaymentStatus.CANCELED
+        : PaymentStatus.FAILED;
 
     payment.status = nextStatus;
     payment.gatewayPayload = {
@@ -242,7 +304,9 @@ export class StripeWebhookProcessorService implements OnModuleInit, OnApplicatio
 
     if (donation) {
       donation.status =
-        nextStatus === PaymentStatus.CANCELED ? DonationStatus.CANCELED : DonationStatus.FAILED;
+        nextStatus === PaymentStatus.CANCELED
+          ? DonationStatus.CANCELED
+          : DonationStatus.FAILED;
       await donation.save();
     }
   }
@@ -293,13 +357,16 @@ export class StripeWebhookProcessorService implements OnModuleInit, OnApplicatio
       return;
     }
 
-    const subscription = await this.getStripeClient().subscriptions.retrieve(subscriptionId);
+    const subscription =
+      await this.getStripeClient().subscriptions.retrieve(subscriptionId);
     const campaignId = subscription.metadata?.campaignId;
     const donorUserId = subscription.metadata?.donorUserId;
     const institutionId = subscription.metadata?.institutionId;
 
     if (!campaignId || !donorUserId || !institutionId) {
-      throw new Error(`Subscription ${subscriptionId} is missing donation metadata`);
+      throw new Error(
+        `Subscription ${subscriptionId} is missing donation metadata`,
+      );
     }
 
     const amountCents = invoice.amount_paid ?? invoice.amount_due ?? 0;
@@ -347,14 +414,19 @@ export class StripeWebhookProcessorService implements OnModuleInit, OnApplicatio
       status: PaymentStatus.PAID,
     });
 
-    await this.campaignModel.findByIdAndUpdate(campaignId, {
-      $inc: {
-        'progress.moneyRaised': amountCents / 100,
-        'stats.donationsCount': 1,
-      },
-    }).exec();
+    await this.campaignModel
+      .findByIdAndUpdate(campaignId, {
+        $inc: {
+          'progress.moneyRaised': amountCents / 100,
+          'stats.donationsCount': 1,
+        },
+      })
+      .exec();
 
-    await this.queueReceiptGeneration(donation._id.toString(), payment._id.toString());
+    await this.queueReceiptGeneration(
+      donation._id.toString(),
+      payment._id.toString(),
+    );
   }
 
   private async queueReceiptGeneration(donationId: string, paymentId: string) {

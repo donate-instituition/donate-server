@@ -202,7 +202,7 @@ export class FollowsService {
 
   async update(id: string, updateFollowDto: UpdateFollowDto) {
     const follow = await this.followModel
-      .findByIdAndUpdate(id, updateFollowDto, { new: true })
+      .findByIdAndUpdate(id, updateFollowDto, { returnDocument: 'after' })
       .exec();
 
     return follow ? this.toFollowResponse(follow) : null;

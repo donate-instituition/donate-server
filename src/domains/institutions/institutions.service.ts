@@ -2,8 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
-import { AuditLog, AuditLogDocument } from '../audit-logs/schemas/audit-log.schema';
-import { Campaign, CampaignDocument } from '../campaigns/schemas/campaign.schema';
+import {
+  AuditLog,
+  AuditLogDocument,
+} from '../audit-logs/schemas/audit-log.schema';
+import {
+  Campaign,
+  CampaignDocument,
+} from '../campaigns/schemas/campaign.schema';
 import { CampaignStatus } from '../campaigns/models';
 import { InstitutionDonationType, InstitutionStatus } from './models';
 import { CreateInstitutionDto } from './dto/create-institution.dto';
@@ -13,10 +19,13 @@ import { Institution, InstitutionDocument } from './schemas/institution.schema';
 @Injectable()
 export class InstitutionsService {
   constructor(
-    @InjectModel(Institution.name) private readonly institutionModel: Model<InstitutionDocument>,
-    @InjectModel(Campaign.name) private readonly campaignModel: Model<CampaignDocument>,
-    @InjectModel(AuditLog.name) private readonly auditLogModel: Model<AuditLogDocument>,
-  ) { }
+    @InjectModel(Institution.name)
+    private readonly institutionModel: Model<InstitutionDocument>,
+    @InjectModel(Campaign.name)
+    private readonly campaignModel: Model<CampaignDocument>,
+    @InjectModel(AuditLog.name)
+    private readonly auditLogModel: Model<AuditLogDocument>,
+  ) {}
 
   private formatCurrency(value: number) {
     return `R$ ${(value / 100).toFixed(2).replace('.', ',')}`;
@@ -31,11 +40,13 @@ export class InstitutionsService {
       OTHER: 'Outros',
     };
 
-    return category ? categoryMap[category] ?? 'Outros' : 'Outros';
+    return category ? (categoryMap[category] ?? 'Outros') : 'Outros';
   }
 
   private mapCampaignCategory(campaign: CampaignDocument | any) {
-    return this.toAppCategory(campaign?.acceptedItems?.[0]?.category?.toString());
+    return this.toAppCategory(
+      campaign?.acceptedItems?.[0]?.category?.toString(),
+    );
   }
 
   private toAppLocation(location?: { coordinates?: unknown }) {
@@ -54,19 +65,31 @@ export class InstitutionsService {
     return { latitude, longitude };
   }
 
-  private resolveCampaignLocation(campaign: CampaignDocument | any, institution: InstitutionDocument | any) {
+  private resolveCampaignLocation(
+    campaign: CampaignDocument | any,
+    institution: InstitutionDocument | any,
+  ) {
     return (
       this.toAppLocation(campaign?.address?.location) ??
       this.toAppLocation(institution?.address?.location)
     );
   }
 
-  private toAppCampaign(campaign: CampaignDocument | any, institution: InstitutionDocument | any) {
+  private toAppCampaign(
+    campaign: CampaignDocument | any,
+    institution: InstitutionDocument | any,
+  ) {
     const goalCents = Number(campaign?.goal?.moneyTarget ?? 0) * 100;
     const raisedCents = Number(campaign?.progress?.moneyRaised ?? 0) * 100;
-    const progress = goalCents > 0 ? Math.min(100, Math.round((raisedCents / goalCents) * 100)) : 0;
-    const active = campaign?.status === CampaignStatus.PUBLISHED && (!campaign?.endAt || new Date(campaign.endAt) >= new Date());
-    const institutionName = institution?.displayName || institution?.legalName || 'Instituição';
+    const progress =
+      goalCents > 0
+        ? Math.min(100, Math.round((raisedCents / goalCents) * 100))
+        : 0;
+    const active =
+      campaign?.status === CampaignStatus.PUBLISHED &&
+      (!campaign?.endAt || new Date(campaign.endAt) >= new Date());
+    const institutionName =
+      institution?.displayName || institution?.legalName || 'Instituição';
 
     return {
       id: campaign._id?.toString() ?? campaign.id,
@@ -80,8 +103,12 @@ export class InstitutionsService {
       raisedCents,
       progress,
       active,
-      endsAt: campaign.endAt ? new Date(campaign.endAt).toISOString().slice(0, 10) : undefined,
-      acceptsRecurringDonations: Boolean(institution?.acceptsRecurringDonations),
+      endsAt: campaign.endAt
+        ? new Date(campaign.endAt).toISOString().slice(0, 10)
+        : undefined,
+      acceptsRecurringDonations: Boolean(
+        institution?.acceptsRecurringDonations,
+      ),
       location: this.resolveCampaignLocation(campaign, institution),
     };
   }
@@ -116,7 +143,8 @@ export class InstitutionsService {
         displayName: 'Educação Viva',
         cnpj: '00000000000100',
         email: 'contato@educacaoviva.org.br',
-        description: 'Promovemos acesso à educação de qualidade para crianças em situação de vulnerabilidade.',
+        description:
+          'Promovemos acesso à educação de qualidade para crianças em situação de vulnerabilidade.',
         status: InstitutionStatus.ACTIVE,
         verification: { isVerified: true },
         address: {
@@ -132,7 +160,8 @@ export class InstitutionsService {
         displayName: 'Lar Aconchego',
         cnpj: '00000000000200',
         email: 'contato@laraconchego.org.br',
-        description: 'Distribuímos cestas básicas e refeições para famílias em insegurança alimentar.',
+        description:
+          'Distribuímos cestas básicas e refeições para famílias em insegurança alimentar.',
         status: InstitutionStatus.ACTIVE,
         verification: { isVerified: true },
         address: {
@@ -153,8 +182,14 @@ export class InstitutionsService {
 
   async findAll() {
     await this.ensureSeedData();
-    const institutions = await this.institutionModel.find().sort({ createdAt: -1 }).lean().exec();
-    return institutions.map((institution) => this.toAppInstitution(institution));
+    const institutions = await this.institutionModel
+      .find()
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+    return institutions.map((institution) =>
+      this.toAppInstitution(institution),
+    );
   }
 
   async findPending() {
@@ -171,7 +206,8 @@ export class InstitutionsService {
       phone: institution.phone,
       website: institution.website,
       status: institution.status,
-      createdAt: institution.createdAt?.toISOString?.() ?? institution.createdAt,
+      createdAt:
+        institution.createdAt?.toISOString?.() ?? institution.createdAt,
     }));
   }
 
@@ -189,7 +225,8 @@ export class InstitutionsService {
       phone: institution.phone,
       website: institution.website,
       status: institution.status,
-      createdAt: institution.createdAt?.toISOString?.() ?? institution.createdAt,
+      createdAt:
+        institution.createdAt?.toISOString?.() ?? institution.createdAt,
     }));
   }
 
@@ -201,7 +238,11 @@ export class InstitutionsService {
       throw new NotFoundException(`Instituição ${id} não encontrada.`);
     }
 
-    const campaigns = await this.campaignModel.find({ institutionId: institution._id }).sort({ createdAt: -1 }).lean().exec();
+    const campaigns = await this.campaignModel
+      .find({ institutionId: institution._id })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
 
     return {
       ...this.toAppInstitution(institution),
@@ -209,13 +250,19 @@ export class InstitutionsService {
       email: institution.email,
       stripeConnectAccountId: institution.stripeConnectAccountId,
       website: institution.website ?? undefined,
-      activeCampaigns: campaigns.filter((campaign) => campaign.status === CampaignStatus.PUBLISHED).length,
-      campaigns: campaigns.map((campaign) => this.toAppCampaign(campaign, institution)),
+      activeCampaigns: campaigns.filter(
+        (campaign) => campaign.status === CampaignStatus.PUBLISHED,
+      ).length,
+      campaigns: campaigns.map((campaign) =>
+        this.toAppCampaign(campaign, institution),
+      ),
     };
   }
 
   update(id: string, updateInstitutionDto: UpdateInstitutionDto) {
-    return this.institutionModel.findByIdAndUpdate(id, updateInstitutionDto, { new: true }).exec();
+    return this.institutionModel
+      .findByIdAndUpdate(id, updateInstitutionDto, { returnDocument: 'after' })
+      .exec();
   }
 
   async approve(id: string, actorUserId?: string) {
@@ -229,7 +276,7 @@ export class InstitutionsService {
             verifiedAt: new Date(),
           },
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean()
       .exec();
@@ -239,11 +286,16 @@ export class InstitutionsService {
     }
 
     await this.auditLogModel.create({
-      actorUserId: actorUserId && Types.ObjectId.isValid(actorUserId) ? new Types.ObjectId(actorUserId) : undefined,
+      actorUserId:
+        actorUserId && Types.ObjectId.isValid(actorUserId)
+          ? new Types.ObjectId(actorUserId)
+          : undefined,
       action: 'institution.approve',
       targetType: 'institution',
       targetId: institution._id,
-      metadata: { institutionName: institution.displayName || institution.legalName },
+      metadata: {
+        institutionName: institution.displayName || institution.legalName,
+      },
     });
 
     return {
@@ -256,7 +308,11 @@ export class InstitutionsService {
 
   async reject(id: string, actorUserId?: string) {
     const institution = await this.institutionModel
-      .findByIdAndUpdate(id, { status: InstitutionStatus.REJECTED }, { new: true })
+      .findByIdAndUpdate(
+        id,
+        { status: InstitutionStatus.REJECTED },
+        { returnDocument: 'after' },
+      )
       .lean()
       .exec();
 
@@ -265,11 +321,16 @@ export class InstitutionsService {
     }
 
     await this.auditLogModel.create({
-      actorUserId: actorUserId && Types.ObjectId.isValid(actorUserId) ? new Types.ObjectId(actorUserId) : undefined,
+      actorUserId:
+        actorUserId && Types.ObjectId.isValid(actorUserId)
+          ? new Types.ObjectId(actorUserId)
+          : undefined,
       action: 'institution.reject',
       targetType: 'institution',
       targetId: institution._id,
-      metadata: { institutionName: institution.displayName || institution.legalName },
+      metadata: {
+        institutionName: institution.displayName || institution.legalName,
+      },
     });
 
     return {

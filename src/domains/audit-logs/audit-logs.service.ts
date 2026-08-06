@@ -9,7 +9,8 @@ import { AuditLog, AuditLogDocument } from './schemas/audit-log.schema';
 @Injectable()
 export class AuditLogsService {
   constructor(
-    @InjectModel(AuditLog.name) private readonly auditLogModel: Model<AuditLogDocument>,
+    @InjectModel(AuditLog.name)
+    private readonly auditLogModel: Model<AuditLogDocument>,
   ) {}
 
   private toAuditLogResponse(auditLog: AuditLogDocument | any) {
@@ -32,7 +33,12 @@ export class AuditLogsService {
   }
 
   async findAll() {
-    const auditLogs = await this.auditLogModel.find().sort({ createdAt: -1 }).limit(100).lean().exec();
+    const auditLogs = await this.auditLogModel
+      .find()
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean()
+      .exec();
     return auditLogs.map((auditLog) => this.toAuditLogResponse(auditLog));
   }
 
@@ -42,7 +48,10 @@ export class AuditLogsService {
   }
 
   async update(id: string, updateAuditLogDto: UpdateAuditLogDto) {
-    const auditLog = await this.auditLogModel.findByIdAndUpdate(id, updateAuditLogDto, { new: true }).lean().exec();
+    const auditLog = await this.auditLogModel
+      .findByIdAndUpdate(id, updateAuditLogDto, { returnDocument: 'after' })
+      .lean()
+      .exec();
     return auditLog ? this.toAuditLogResponse(auditLog) : null;
   }
 

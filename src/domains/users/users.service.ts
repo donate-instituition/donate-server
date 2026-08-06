@@ -1,4 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
@@ -53,11 +59,16 @@ function systemGrant(role: UserRole): UserRoleGrant {
   };
 }
 
-function normalizeRoleGrants(roles?: Array<UserRole | UserRoleGrantInput>): UserRoleGrant[] {
-  const roleNames = uniqueRoles((roles?.length ? roles : [UserRole.DONOR]).map(getRoleName));
+function normalizeRoleGrants(
+  roles?: Array<UserRole | UserRoleGrantInput>,
+): UserRoleGrant[] {
+  const roleNames = uniqueRoles(
+    (roles?.length ? roles : [UserRole.DONOR]).map(getRoleName),
+  );
 
   if (
-    (roleNames.includes(UserRole.PLATFORM_ADMIN) || roleNames.includes(UserRole.INSTITUTION_STAFF)) &&
+    (roleNames.includes(UserRole.PLATFORM_ADMIN) ||
+      roleNames.includes(UserRole.INSTITUTION_STAFF)) &&
     !roleNames.includes(UserRole.DONOR)
   ) {
     roleNames.push(UserRole.DONOR);
@@ -81,15 +92,19 @@ function normalizeRoleGrants(roles?: Array<UserRole | UserRoleGrantInput>): User
   });
 }
 
-function normalizeSettings(settings: CreateUserDto['settings'] | UpdateUserDto['settings'] | undefined, roles: UserRoleGrant[]) {
+function normalizeSettings(
+  settings: CreateUserDto['settings'] | UpdateUserDto['settings'] | undefined,
+  roles: UserRoleGrant[],
+) {
   if (!settings) {
     return undefined;
   }
 
   const roleNames = roles.map((role) => role.name);
-  const preferredRole = settings.preferredRole && roleNames.includes(settings.preferredRole)
-    ? settings.preferredRole
-    : undefined;
+  const preferredRole =
+    settings.preferredRole && roleNames.includes(settings.preferredRole)
+      ? settings.preferredRole
+      : undefined;
 
   return {
     ...settings,
@@ -103,7 +118,7 @@ export class UsersService implements OnModuleInit {
 
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-  ) { }
+  ) {}
 
   private async dropLegacyNameIndex() {
     try {
@@ -119,23 +134,35 @@ export class UsersService implements OnModuleInit {
   }
 
   private isDuplicateKey(error: unknown): error is MongoDuplicateKeyError {
-    return typeof error === 'object' && error !== null && 'code' in error && (error as MongoDuplicateKeyError).code === 11000;
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as MongoDuplicateKeyError).code === 11000
+    );
   }
 
   async onModuleInit() {
     await this.dropLegacyNameIndex();
 
-    const users = await this.userModel.find().select('_id role roles').lean().exec() as LegacyUserRoleDocument[];
+    const users = (await this.userModel
+      .find()
+      .select('_id role roles')
+      .lean()
+      .exec()) as LegacyUserRoleDocument[];
 
     await Promise.all(
       users.map((user) => {
-        const rawRoles = Array.isArray(user.roles) && user.roles.length
-          ? user.roles
-          : user.role
-            ? [user.role]
-            : [UserRole.DONOR];
+        const rawRoles =
+          Array.isArray(user.roles) && user.roles.length
+            ? user.roles
+            : user.role
+              ? [user.role]
+              : [UserRole.DONOR];
 
-        const roleGrants = normalizeRoleGrants(rawRoles as Array<UserRole | UserRoleGrantInput>);
+        const roleGrants = normalizeRoleGrants(
+          rawRoles as Array<UserRole | UserRoleGrantInput>,
+        );
 
         return this.userModel
           .updateOne(
@@ -157,14 +184,18 @@ export class UsersService implements OnModuleInit {
       throw new ConflictException('Email is required');
     }
 
-    const existingUser = await this.userModel.findOne({ email: normalizedEmail }).exec();
+    const existingUser = await this.userModel
+      .findOne({ email: normalizedEmail })
+      .exec();
 
     if (existingUser) {
       throw new ConflictException('Email already registered');
     }
 
     if (createUserDto.cpf) {
-      const existingCpf = await this.userModel.findOne({ cpf: createUserDto.cpf }).exec();
+      const existingCpf = await this.userModel
+        .findOne({ cpf: createUserDto.cpf })
+        .exec();
 
       if (existingCpf) {
         throw new ConflictException('CPF already registered');
@@ -260,7 +291,8 @@ export class UsersService implements OnModuleInit {
             cpf: createUserDto.cpf,
             birthDate: createUserDto.birthDate,
             passwordHash: createUserDto.passwordHash,
-            passwordChangeRequired: createUserDto.passwordChangeRequired ?? false,
+            passwordChangeRequired:
+              createUserDto.passwordChangeRequired ?? false,
             activationTokenVersion: createUserDto.activationTokenVersion,
             status: createUserDto.status ?? UserStatus.ACTIVE,
             isVerified: createUserDto.isVerified ?? true,
@@ -271,7 +303,7 @@ export class UsersService implements OnModuleInit {
           },
           $unset: { role: '' },
         },
-        { new: true, upsert: true, setDefaultsOnInsert: true },
+        { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
       )
       .exec();
   }
@@ -283,11 +315,15 @@ export class UsersService implements OnModuleInit {
       return null;
     }
 
-    const roles = normalizeRoleGrants(user.roles as Array<UserRole | UserRoleGrantInput>);
+    const roles = normalizeRoleGrants(
+      user.roles as Array<UserRole | UserRoleGrantInput>,
+    );
     const roleNames = roles.map((role) => role.name);
 
     if (!roleNames.includes(preferredRole)) {
-      throw new BadRequestException('Preferred role is not available for this user');
+      throw new BadRequestException(
+        'Preferred role is not available for this user',
+      );
     }
 
     user.roles = roles;
@@ -301,7 +337,9 @@ export class UsersService implements OnModuleInit {
   }
 
   update(id: string, updateUserDto: UpdateUserDto) {
-    return this.userModel.findByIdAndUpdate(id, updateUserDto, { new: true }).exec();
+    return this.userModel
+      .findByIdAndUpdate(id, updateUserDto, { returnDocument: 'after' })
+      .exec();
   }
 
   acceptTerms(id: string, version: string) {
@@ -315,7 +353,7 @@ export class UsersService implements OnModuleInit {
             termsAcceptedAt: new Date(),
           },
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .exec();
   }

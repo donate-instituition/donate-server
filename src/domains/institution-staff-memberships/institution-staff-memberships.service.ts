@@ -63,7 +63,9 @@ export class InstitutionStaffMembershipsService {
     return new Types.ObjectId(id);
   }
 
-  private toMembershipResponse(membership: InstitutionStaffMembershipDocument | any) {
+  private toMembershipResponse(
+    membership: InstitutionStaffMembershipDocument | any,
+  ) {
     return {
       id: membership._id?.toString() ?? membership.id,
       institutionId: membership.institutionId?.toString(),
@@ -142,24 +144,32 @@ export class InstitutionStaffMembershipsService {
         .exec();
 
       if (!currentMembership) {
-        throw new ForbiddenException('Only institution admins or managers can create staff users');
+        throw new ForbiddenException(
+          'Only institution admins or managers can create staff users',
+        );
       }
     }
 
     const normalizedEmail = createStaffUserDto.email.trim().toLowerCase();
-    const passwordMode = createStaffUserDto.passwordMode ?? (createStaffUserDto.password ? 'manual' : 'generated');
-    const initialPassword = passwordMode === 'generated'
-      ? this.generatePassword()
-      : createStaffUserDto.password?.trim() ?? '';
+    const passwordMode =
+      createStaffUserDto.passwordMode ??
+      (createStaffUserDto.password ? 'manual' : 'generated');
+    const initialPassword =
+      passwordMode === 'generated'
+        ? this.generatePassword()
+        : (createStaffUserDto.password?.trim() ?? '');
     const passwordChangeRequired =
-      passwordMode === 'generated' || Boolean(createStaffUserDto.forcePasswordChange);
+      passwordMode === 'generated' ||
+      Boolean(createStaffUserDto.forcePasswordChange);
 
     if (!initialPassword || initialPassword.length < 8) {
       throw new BadRequestException('Password must have at least 8 characters');
     }
     assertPasswordPolicy(initialPassword);
 
-    const existingUser = await this.userModel.findOne({ email: normalizedEmail }).exec();
+    const existingUser = await this.userModel
+      .findOne({ email: normalizedEmail })
+      .exec();
 
     if (existingUser) {
       throw new ConflictException('Email already registered');
@@ -190,7 +200,9 @@ export class InstitutionStaffMembershipsService {
       fullName: createStaffUserDto.name,
       email: normalizedEmail,
       cpf: createStaffUserDto.cpf?.replace(/\D/g, ''),
-      birthDate: createStaffUserDto.birthDate ? new Date(createStaffUserDto.birthDate) : undefined,
+      birthDate: createStaffUserDto.birthDate
+        ? new Date(createStaffUserDto.birthDate)
+        : undefined,
       phone: createStaffUserDto.phone?.replace(/\D/g, ''),
       passwordHash: await hash(initialPassword, 10),
       passwordChangeRequired,
@@ -271,7 +283,10 @@ export class InstitutionStaffMembershipsService {
     try {
       await this.emailJobsService.sendAccountCreatedEmail({
         accountStatus: 'pending-verification',
-        activationUrl: createAccountActivationUrl(input.userId, input.activationTokenVersion),
+        activationUrl: createAccountActivationUrl(
+          input.userId,
+          input.activationTokenVersion,
+        ),
         initialPassword: input.initialPassword,
         name: input.name,
         passwordChangeRequired: input.passwordChangeRequired,
@@ -287,8 +302,14 @@ export class InstitutionStaffMembershipsService {
   }
 
   async findAll() {
-    const memberships = await this.institutionStaffMembershipModel.find().sort({ createdAt: -1 }).lean().exec();
-    return memberships.map((membership) => this.toMembershipResponse(membership));
+    const memberships = await this.institutionStaffMembershipModel
+      .find()
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+    return memberships.map((membership) =>
+      this.toMembershipResponse(membership),
+    );
   }
 
   async findMine(currentUser?: AuthenticatedUser) {
@@ -305,17 +326,24 @@ export class InstitutionStaffMembershipsService {
       .lean()
       .exec();
 
-    const institutionIds = memberships.map((membership) => membership.institutionId);
+    const institutionIds = memberships.map(
+      (membership) => membership.institutionId,
+    );
     const institutions = await this.institutionModel
       .find({ _id: { $in: institutionIds } })
       .lean()
       .exec();
     const institutionById = new Map(
-      institutions.map((institution) => [institution._id.toString(), institution]),
+      institutions.map((institution) => [
+        institution._id.toString(),
+        institution,
+      ]),
     );
 
     return memberships.map((membership) => {
-      const institution = institutionById.get(membership.institutionId.toString());
+      const institution = institutionById.get(
+        membership.institutionId.toString(),
+      );
 
       return {
         ...this.toMembershipResponse(membership),
@@ -353,7 +381,9 @@ export class InstitutionStaffMembershipsService {
     const userIds = teamMemberships.map((membership) => membership.userId);
     const users = await this.userModel
       .find({ _id: { $in: userIds } })
-      .select('_id fullName email profilePhotoUrl status isVerified passwordChangeRequired')
+      .select(
+        '_id fullName email profilePhotoUrl status isVerified passwordChangeRequired',
+      )
       .lean()
       .exec();
     const userById = new Map(users.map((user) => [user._id.toString(), user]));
@@ -387,7 +417,10 @@ export class InstitutionStaffMembershipsService {
   }
 
   async findOne(id: string) {
-    const membership = await this.institutionStaffMembershipModel.findById(id).lean().exec();
+    const membership = await this.institutionStaffMembershipModel
+      .findById(id)
+      .lean()
+      .exec();
     return membership ? this.toMembershipResponse(membership) : null;
   }
 
@@ -396,7 +429,9 @@ export class InstitutionStaffMembershipsService {
     updateInstitutionStaffMembershipDto: UpdateInstitutionStaffMembershipDto,
   ) {
     const membership = await this.institutionStaffMembershipModel
-      .findByIdAndUpdate(id, updateInstitutionStaffMembershipDto, { new: true })
+      .findByIdAndUpdate(id, updateInstitutionStaffMembershipDto, {
+        returnDocument: 'after',
+      })
       .lean()
       .exec();
 

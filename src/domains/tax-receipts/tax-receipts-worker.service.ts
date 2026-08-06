@@ -16,7 +16,9 @@ type ReceiptGeneratePayload = {
 };
 
 @Injectable()
-export class TaxReceiptsWorkerService implements OnModuleInit, OnApplicationShutdown {
+export class TaxReceiptsWorkerService
+  implements OnModuleInit, OnApplicationShutdown
+{
   private readonly logger = new Logger(TaxReceiptsWorkerService.name);
   private channel?: Channel;
   private connection?: ChannelModel;
@@ -25,51 +27,65 @@ export class TaxReceiptsWorkerService implements OnModuleInit, OnApplicationShut
 
   async onModuleInit() {
     if (!env.rabbitmqUrl) {
-      this.logger.warn('RabbitMQ is not configured; receipt generation jobs will not be consumed.');
+      this.logger.warn(
+        'RabbitMQ is not configured; receipt generation jobs will not be consumed.',
+      );
       return;
     }
 
-    const connection = await connect(env.rabbitmqUrl);
-    const channel = await connection.createChannel();
-    this.connection = connection;
-    this.channel = channel;
+    try {
+      const connection = await connect(env.rabbitmqUrl);
+      const channel = await connection.createChannel();
+      this.connection = connection;
+      this.channel = channel;
 
-    await channel.assertExchange(env.rabbitmqExchange, 'direct', { durable: true });
-    const queue = 'receipt.generate';
-    await channel.assertQueue(queue, { durable: true });
-    await channel.bindQueue(queue, env.rabbitmqExchange, 'receipt.generate');
-    await channel.prefetch(3);
-    await channel.consume(queue, async (message) => {
-      if (!message) return;
+      await channel.assertExchange(env.rabbitmqExchange, 'direct', {
+        durable: true,
+      });
+      const queue = 'receipt.generate';
+      await channel.assertQueue(queue, { durable: true });
+      await channel.bindQueue(queue, env.rabbitmqExchange, 'receipt.generate');
+      await channel.prefetch(3);
+      await channel.consume(queue, async (message) => {
+        if (!message) return;
 
-      try {
-        const job = JSON.parse(message.content.toString()) as QueueMessage<ReceiptGeneratePayload>;
-        this.logger.log(
-          JSON.stringify({
-            event: 'receipt_generation_started',
-            donationId: job.payload.donationId,
-            paymentId: job.payload.paymentId,
-          }),
-        );
-        await this.taxReceiptsService.generateForPayment(
-          job.payload.donationId,
-          job.payload.paymentId,
-        );
-        this.logger.log(
-          JSON.stringify({
-            event: 'receipt_generation_finished',
-            donationId: job.payload.donationId,
-            paymentId: job.payload.paymentId,
-          }),
-        );
-        channel.ack(message);
-      } catch (error) {
-        this.logger.error(
-          `Failed to generate receipt: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        channel.nack(message, false, true);
-      }
-    });
+        try {
+          const job = JSON.parse(
+            message.content.toString(),
+          ) as QueueMessage<ReceiptGeneratePayload>;
+          this.logger.log(
+            JSON.stringify({
+              event: 'receipt_generation_started',
+              donationId: job.payload.donationId,
+              paymentId: job.payload.paymentId,
+            }),
+          );
+          await this.taxReceiptsService.generateForPayment(
+            job.payload.donationId,
+            job.payload.paymentId,
+          );
+          this.logger.log(
+            JSON.stringify({
+              event: 'receipt_generation_finished',
+              donationId: job.payload.donationId,
+              paymentId: job.payload.paymentId,
+            }),
+          );
+          channel.ack(message);
+        } catch (error) {
+          this.logger.error(
+            `Failed to generate receipt: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          channel.nack(message, false, true);
+        }
+      });
+    } catch (error) {
+      this.logger.warn(
+        `RabbitMQ is unavailable; receipt generation jobs will not be consumed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   async onApplicationShutdown() {

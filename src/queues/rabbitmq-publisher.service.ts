@@ -1,17 +1,11 @@
-import {
-  Injectable,
-  Logger,
-  OnApplicationShutdown,
-} from '@nestjs/common';
+import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { Channel, ChannelModel, connect } from 'amqplib';
 
 import { env } from '../config/env';
 import type { QueueMessage } from './queue-message';
 
 @Injectable()
-export class RabbitMqPublisherService
-  implements OnApplicationShutdown
-{
+export class RabbitMqPublisherService implements OnApplicationShutdown {
   private readonly logger = new Logger(RabbitMqPublisherService.name);
   private channel?: Channel;
   private connection?: ChannelModel;
@@ -21,10 +15,7 @@ export class RabbitMqPublisherService
     await this.connection?.close().catch(() => undefined);
   }
 
-  async publish<TPayload>(
-    routingKey: string,
-    message: QueueMessage<TPayload>,
-  ) {
+  async publish<TPayload>(routingKey: string, message: QueueMessage<TPayload>) {
     if (!env.rabbitmqUrl) {
       this.logger.warn(
         JSON.stringify({
@@ -35,7 +26,18 @@ export class RabbitMqPublisherService
       return;
     }
 
-    const channel = await this.getChannel();
+    const channel = await this.getChannel().catch((error) => {
+      this.logger.warn(
+        `RabbitMQ is unavailable; message will not be published to ${routingKey}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return undefined;
+    });
+
+    if (!channel) {
+      return;
+    }
     const published = channel.publish(
       env.rabbitmqExchange,
       routingKey,
