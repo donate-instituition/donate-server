@@ -6,9 +6,11 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import { Roles } from '../../auth/decorators/roles.decorator';
+import type { PaginationQuery } from '../../common/pagination';
 import { UserRole } from '../users/models';
 import { CreateAuditLogDto } from './dto/create-audit-log.dto';
 import { UpdateAuditLogDto } from './dto/update-audit-log.dto';
@@ -25,8 +27,8 @@ export class AuditLogsController {
 
   @Get()
   @Roles(UserRole.PLATFORM_ADMIN)
-  findAll() {
-    return this.auditLogsService.findAll();
+  findAll(@Query() query: PaginationQuery) {
+    return this.auditLogsService.findAll(query);
   }
 
   @Get(':id')

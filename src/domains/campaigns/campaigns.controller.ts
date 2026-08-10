@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   Res,
 } from '@nestjs/common';
@@ -15,6 +16,7 @@ import { isAbsolute } from 'path';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
 import { Public } from '../../auth/decorators/public.decorator';
+import type { PaginationQuery } from '../../common/pagination';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
 import { UploadCampaignAssetDto } from './dto/upload-campaign-asset.dto';
@@ -65,13 +67,16 @@ export class CampaignsController {
 
   @Public()
   @Get()
-  findAll() {
-    return this.campaignsService.findAll();
+  findAll(@Query() query: PaginationQuery) {
+    return this.campaignsService.findAll(query);
   }
 
   @Get('mine')
-  findMine(@CurrentUser() user: AuthenticatedUser | undefined) {
-    return this.campaignsService.findMine(user?.sub);
+  findMine(
+    @CurrentUser() user: AuthenticatedUser | undefined,
+    @Query() query: PaginationQuery,
+  ) {
+    return this.campaignsService.findMine(user?.sub, query);
   }
 
   @Public()

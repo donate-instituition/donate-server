@@ -9,6 +9,12 @@ import { Model, Types } from 'mongoose';
 
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
 import {
+  getPaginationOptions,
+  paginatedResponse,
+  type PaginationQuery,
+  shouldPaginate,
+} from '../../common/pagination';
+import {
   Campaign,
   CampaignDocument,
 } from '../campaigns/schemas/campaign.schema';
@@ -202,12 +208,40 @@ export class PostsService {
     return this.toPostResponse(post);
   }
 
-  async findAll() {
-    const posts = await this.postModel.find().sort({ createdAt: -1 }).exec();
-    return posts.map((post) => this.toPostResponse(post));
+  async findAll(query: PaginationQuery = {}) {
+    const pagination = getPaginationOptions(query);
+    const shouldReturnPaginated = shouldPaginate(query);
+    const filter: Record<string, unknown> = {};
+
+    if (pagination.search) {
+      filter.content = { $regex: pagination.search, $options: 'i' };
+    }
+
+    const posts = await this.postModel
+      .find(filter)
+      .sort({ createdAt: pagination.sort === 'oldest' ? 1 : -1 })
+      .skip(shouldReturnPaginated ? pagination.skip : 0)
+      .limit(shouldReturnPaginated ? pagination.limit : 0)
+      .exec();
+    const items = posts.map((post) => this.toPostResponse(post));
+
+    if (!shouldReturnPaginated) {
+      return items;
+    }
+
+    const total = await this.postModel.countDocuments(filter).exec();
+    return paginatedResponse(items, total, pagination);
   }
 
-  async feed(followerUserId?: string) {
+  async feed(followerUserId?: string, query: PaginationQuery = {}) {
+    const pagination = getPaginationOptions({
+      limit: query.limit ?? '50',
+      page: query.page,
+      paginated: query.paginated,
+      search: query.search,
+      sort: query.sort,
+    });
+    const shouldReturnPaginated = shouldPaginate(query);
     const userId = this.toObjectId(followerUserId);
     const follows = await this.followModel
       .find({ followerUserId: userId })
@@ -237,8 +271,7 @@ export class PostsService {
       },
     ];
 
-    const posts = await this.postModel
-      .find({
+    const filter = {
         $or: [
           { visibility: PostVisibility.PUBLIC },
           {
@@ -246,12 +279,22 @@ export class PostsService {
             $or: followerOnlyConditions,
           },
         ],
-      })
-      .sort({ createdAt: -1 })
-      .limit(100)
+      };
+    const posts = await this.postModel
+      .find(filter)
+      .sort({ createdAt: pagination.sort === 'oldest' ? 1 : -1 })
+      .skip(shouldReturnPaginated ? pagination.skip : 0)
+      .limit(shouldReturnPaginated ? pagination.limit : 100)
       .exec();
 
-    return posts.map((post) => this.toPostResponse(post));
+    const items = posts.map((post) => this.toPostResponse(post));
+
+    if (!shouldReturnPaginated) {
+      return items;
+    }
+
+    const total = await this.postModel.countDocuments(filter).exec();
+    return paginatedResponse(items, total, pagination);
   }
 
   async findOne(id: string, followerUserId?: string) {

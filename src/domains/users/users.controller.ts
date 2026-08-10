@@ -7,10 +7,12 @@ import {
   Param,
   Delete,
   UnauthorizedException,
+  Query,
 } from '@nestjs/common';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
+import type { PaginationQuery } from '../../common/pagination';
 import { UserRole } from './models';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -29,8 +31,8 @@ export class UsersController {
 
   @Get()
   @Roles(UserRole.PLATFORM_ADMIN)
-  findAll() {
-    return this.usersService.findAll();
+  findAll(@Query() query: PaginationQuery) {
+    return this.usersService.findAll(query);
   }
 
   @Post('me/push-tokens')
@@ -61,6 +63,12 @@ export class UsersController {
       currentUser.sub,
       unregisterPushTokenDto,
     );
+  }
+
+  @Get(':id/details')
+  @Roles(UserRole.PLATFORM_ADMIN)
+  findAdminDetail(@Param('id') id: string) {
+    return this.usersService.findAdminDetail(id);
   }
 
   @Get(':id')

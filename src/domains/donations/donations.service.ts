@@ -7,6 +7,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
 import {
+  getPaginationOptions,
+  paginatedResponse,
+  type PaginationQuery,
+  shouldPaginate,
+} from '../../common/pagination';
+import {
   Campaign,
   CampaignDocument,
 } from '../campaigns/schemas/campaign.schema';
@@ -235,34 +241,56 @@ export class DonationsService {
     return { donation: await this.enrichDonation(donation) };
   }
 
-  async findAll() {
+  async findAll(query: PaginationQuery = {}) {
     await this.ensureSeedData();
+    const pagination = getPaginationOptions(query);
+    const shouldReturnPaginated = shouldPaginate(query);
     const donations = await this.donationModel
       .find()
       .sort({ createdAt: -1 })
+      .skip(shouldReturnPaginated ? pagination.skip : 0)
+      .limit(shouldReturnPaginated ? pagination.limit : 0)
       .lean()
       .exec();
-    return Promise.all(
+    const items = await Promise.all(
       donations.map((donation) => this.enrichDonation(donation)),
     );
+
+    if (!shouldReturnPaginated) {
+      return items;
+    }
+
+    const total = await this.donationModel.countDocuments().exec();
+    return paginatedResponse(items, total, pagination);
   }
 
-  async findMyDonations(donorUserId?: string) {
+  async findMyDonations(donorUserId?: string, query: PaginationQuery = {}) {
     await this.ensureSeedData();
-    const query = donorUserId
+    const pagination = getPaginationOptions(query);
+    const shouldReturnPaginated = shouldPaginate(query);
+    const filter = donorUserId
       ? { donorUserId: new Types.ObjectId(donorUserId) }
       : {};
     const donations = await this.donationModel
-      .find(query)
+      .find(filter)
       .sort({ createdAt: -1 })
+      .skip(shouldReturnPaginated ? pagination.skip : 0)
+      .limit(shouldReturnPaginated ? pagination.limit : 0)
       .lean()
       .exec();
-    return Promise.all(
+    const items = await Promise.all(
       donations.map((donation) => this.enrichDonation(donation)),
     );
+
+    if (!shouldReturnPaginated) {
+      return items;
+    }
+
+    const total = await this.donationModel.countDocuments(filter).exec();
+    return paginatedResponse(items, total, pagination);
   }
 
-  async findMyInstitutionDonations(userId?: string) {
+  async findMyInstitutionDonations(userId?: string, query: PaginationQuery = {}) {
     await this.ensureSeedData();
 
     if (!userId || !Types.ObjectId.isValid(userId)) {
@@ -284,15 +312,27 @@ export class DonationsService {
       return [];
     }
 
+    const pagination = getPaginationOptions(query);
+    const shouldReturnPaginated = shouldPaginate(query);
+    const filter = { institutionId: { $in: institutionIds } };
     const donations = await this.donationModel
-      .find({ institutionId: { $in: institutionIds } })
+      .find(filter)
       .sort({ createdAt: -1 })
+      .skip(shouldReturnPaginated ? pagination.skip : 0)
+      .limit(shouldReturnPaginated ? pagination.limit : 0)
       .lean()
       .exec();
 
-    return Promise.all(
+    const items = await Promise.all(
       donations.map((donation) => this.enrichDonation(donation)),
     );
+
+    if (!shouldReturnPaginated) {
+      return items;
+    }
+
+    const total = await this.donationModel.countDocuments(filter).exec();
+    return paginatedResponse(items, total, pagination);
   }
 
   async findOne(id: string) {

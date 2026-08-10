@@ -6,10 +6,12 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
+import type { PaginationQuery } from '../../common/pagination';
 import { CreateDonationDto } from './dto/create-donation.dto';
 import { UpdateDonationDto } from './dto/update-donation.dto';
 import { DonationsService } from './donations.service';
@@ -27,20 +29,24 @@ export class DonationsController {
   }
 
   @Get('me')
-  findMyDonations(@CurrentUser() user: AuthenticatedUser | undefined) {
-    return this.donationsService.findMyDonations(user?.sub);
+  findMyDonations(
+    @CurrentUser() user: AuthenticatedUser | undefined,
+    @Query() query: PaginationQuery,
+  ) {
+    return this.donationsService.findMyDonations(user?.sub, query);
   }
 
   @Get('institution/me')
   findMyInstitutionDonations(
     @CurrentUser() user: AuthenticatedUser | undefined,
+    @Query() query: PaginationQuery,
   ) {
-    return this.donationsService.findMyInstitutionDonations(user?.sub);
+    return this.donationsService.findMyInstitutionDonations(user?.sub, query);
   }
 
   @Get()
-  findAll() {
-    return this.donationsService.findAll();
+  findAll(@Query() query: PaginationQuery) {
+    return this.donationsService.findAll(query);
   }
 
   @Get(':id')

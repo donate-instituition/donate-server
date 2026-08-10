@@ -9,6 +9,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import Stripe from 'stripe';
 
+import {
+  getPaginationOptions,
+  paginatedResponse,
+  type PaginationQuery,
+  shouldPaginate,
+} from '../../common/pagination';
 import { env } from '../../config/env';
 import {
   AuditLog,
@@ -323,54 +329,109 @@ export class InstitutionsService {
     return this.institutionModel.create(createInstitutionDto);
   }
 
-  async findAll() {
+  private buildInstitutionSearchFilter(search?: string) {
+    if (!search) {
+      return {};
+    }
+
+    return {
+      $or: [
+        { legalName: { $regex: search, $options: 'i' } },
+        { displayName: { $regex: search, $options: 'i' } },
+        { cnpj: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { 'address.city': { $regex: search, $options: 'i' } },
+        { 'address.state': { $regex: search, $options: 'i' } },
+      ],
+    };
+  }
+
+  private toAdminInstitution(institution: InstitutionDocument | any) {
+    return {
+      ...this.toAppInstitution(institution),
+      cnpj: institution.cnpj,
+      email: institution.email,
+      phone: institution.phone,
+      website: institution.website,
+      status: institution.status,
+      createdAt:
+        institution.createdAt?.toISOString?.() ?? institution.createdAt,
+    };
+  }
+
+  async findAll(query: PaginationQuery = {}) {
     await this.ensureSeedData();
+    const pagination = getPaginationOptions(query);
+    const shouldReturnPaginated = shouldPaginate(query);
+    const filter = this.buildInstitutionSearchFilter(pagination.search);
     const institutions = await this.institutionModel
-      .find()
-      .sort({ createdAt: -1 })
+      .find(filter)
+      .sort({ createdAt: pagination.sort === 'name' ? 1 : -1 })
+      .skip(shouldReturnPaginated ? pagination.skip : 0)
+      .limit(shouldReturnPaginated ? pagination.limit : 0)
       .lean()
       .exec();
-    return institutions.map((institution) =>
+    const items = institutions.map((institution) =>
       this.toAppInstitution(institution),
     );
+
+    if (!shouldReturnPaginated) {
+      return items;
+    }
+
+    const total = await this.institutionModel.countDocuments(filter).exec();
+    return paginatedResponse(items, total, pagination);
   }
 
-  async findPending() {
+  async findPending(query: PaginationQuery = {}) {
+    const pagination = getPaginationOptions(query);
+    const shouldReturnPaginated = shouldPaginate(query);
+    const filter = {
+      ...this.buildInstitutionSearchFilter(pagination.search),
+      status: InstitutionStatus.PENDING_APPROVAL,
+    };
     const institutions = await this.institutionModel
-      .find({ status: InstitutionStatus.PENDING_APPROVAL })
+      .find(filter)
       .sort({ createdAt: -1 })
+      .skip(shouldReturnPaginated ? pagination.skip : 0)
+      .limit(shouldReturnPaginated ? pagination.limit : 0)
       .lean()
       .exec();
 
-    return institutions.map((institution) => ({
-      ...this.toAppInstitution(institution),
-      cnpj: institution.cnpj,
-      email: institution.email,
-      phone: institution.phone,
-      website: institution.website,
-      status: institution.status,
-      createdAt:
-        institution.createdAt?.toISOString?.() ?? institution.createdAt,
-    }));
+    const items = institutions.map((institution) =>
+      this.toAdminInstitution(institution),
+    );
+
+    if (!shouldReturnPaginated) {
+      return items;
+    }
+
+    const total = await this.institutionModel.countDocuments(filter).exec();
+    return paginatedResponse(items, total, pagination);
   }
 
-  async findAllForAdmin() {
+  async findAllForAdmin(query: PaginationQuery = {}) {
+    const pagination = getPaginationOptions(query);
+    const shouldReturnPaginated = shouldPaginate(query);
+    const filter = this.buildInstitutionSearchFilter(pagination.search);
     const institutions = await this.institutionModel
-      .find()
-      .sort({ createdAt: -1 })
+      .find(filter)
+      .sort({ createdAt: pagination.sort === 'name' ? 1 : -1 })
+      .skip(shouldReturnPaginated ? pagination.skip : 0)
+      .limit(shouldReturnPaginated ? pagination.limit : 0)
       .lean()
       .exec();
 
-    return institutions.map((institution) => ({
-      ...this.toAppInstitution(institution),
-      cnpj: institution.cnpj,
-      email: institution.email,
-      phone: institution.phone,
-      website: institution.website,
-      status: institution.status,
-      createdAt:
-        institution.createdAt?.toISOString?.() ?? institution.createdAt,
-    }));
+    const items = institutions.map((institution) =>
+      this.toAdminInstitution(institution),
+    );
+
+    if (!shouldReturnPaginated) {
+      return items;
+    }
+
+    const total = await this.institutionModel.countDocuments(filter).exec();
+    return paginatedResponse(items, total, pagination);
   }
 
   async findOne(id: string) {

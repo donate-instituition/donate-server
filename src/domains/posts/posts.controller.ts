@@ -6,10 +6,12 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
+import type { PaginationQuery } from '../../common/pagination';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
@@ -27,13 +29,16 @@ export class PostsController {
   }
 
   @Get()
-  findAll() {
-    return this.postsService.findAll();
+  findAll(@Query() query: PaginationQuery) {
+    return this.postsService.findAll(query);
   }
 
   @Get('feed')
-  feed(@CurrentUser() user: AuthenticatedUser | undefined) {
-    return this.postsService.feed(user?.sub);
+  feed(
+    @CurrentUser() user: AuthenticatedUser | undefined,
+    @Query() query: PaginationQuery,
+  ) {
+    return this.postsService.feed(user?.sub, query);
   }
 
   @Get(':id')

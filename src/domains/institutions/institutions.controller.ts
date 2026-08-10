@@ -6,12 +6,14 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import { Public } from '../../auth/decorators/public.decorator';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
+import type { PaginationQuery } from '../../common/pagination';
 import { UserRole } from '../users/models';
 import { CreateInstitutionDto } from './dto/create-institution.dto';
 import { UpdateInstitutionDto } from './dto/update-institution.dto';
@@ -29,20 +31,20 @@ export class InstitutionsController {
 
   @Public()
   @Get()
-  findAll() {
-    return this.institutionsService.findAll();
+  findAll(@Query() query: PaginationQuery) {
+    return this.institutionsService.findAll(query);
   }
 
   @Roles(UserRole.PLATFORM_ADMIN)
   @Get('admin/pending')
-  findPending() {
-    return this.institutionsService.findPending();
+  findPending(@Query() query: PaginationQuery) {
+    return this.institutionsService.findPending(query);
   }
 
   @Roles(UserRole.PLATFORM_ADMIN)
   @Get('admin')
-  findAllForAdmin() {
-    return this.institutionsService.findAllForAdmin();
+  findAllForAdmin(@Query() query: PaginationQuery) {
+    return this.institutionsService.findAllForAdmin(query);
   }
 
   @Roles(UserRole.PLATFORM_ADMIN)

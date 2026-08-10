@@ -8,6 +8,30 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
+import {
+  getPaginationOptions,
+  paginatedResponse,
+  type PaginationQuery,
+  shouldPaginate,
+} from '../../common/pagination';
+import {
+  AuditLog,
+  AuditLogDocument,
+} from '../audit-logs/schemas/audit-log.schema';
+import {
+  Campaign,
+  CampaignDocument,
+} from '../campaigns/schemas/campaign.schema';
+import { DonationStatus } from '../donations/models';
+import {
+  Donation,
+  DonationDocument,
+} from '../donations/schemas/donation.schema';
+import {
+  Institution,
+  InstitutionDocument,
+} from '../institutions/schemas/institution.schema';
+import { Post, PostDocument } from '../posts/schemas/post.schema';
 import { CreateUserDto, type UserRoleGrantInput } from './dto/create-user.dto';
 import { RegisterPushTokenDto } from './dto/register-push-token.dto';
 import { UnregisterPushTokenDto } from './dto/unregister-push-token.dto';
@@ -120,6 +144,15 @@ export class UsersService implements OnModuleInit {
 
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @InjectModel(Donation.name)
+    private readonly donationModel: Model<DonationDocument>,
+    @InjectModel(Post.name) private readonly postModel: Model<PostDocument>,
+    @InjectModel(AuditLog.name)
+    private readonly auditLogModel: Model<AuditLogDocument>,
+    @InjectModel(Campaign.name)
+    private readonly campaignModel: Model<CampaignDocument>,
+    @InjectModel(Institution.name)
+    private readonly institutionModel: Model<InstitutionDocument>,
   ) {}
 
   private async dropLegacyNameIndex() {
@@ -260,13 +293,194 @@ export class UsersService implements OnModuleInit {
     return publicUser;
   }
 
-  async findAll() {
-    const users = await this.userModel.find().sort({ createdAt: -1 }).exec();
-    return users.map((user) => this.toPublicUser(user));
+  private formatCurrency(value: number) {
+    return `R$ ${(value / 100).toFixed(2).replace('.', ',')}`;
+  }
+
+  private toAppDonationStatus(status?: DonationStatus) {
+    const statusMap: Record<string, string> = {
+      CREATED: 'pending',
+      PENDING_PAYMENT: 'pending',
+      PAID: 'completed',
+      SCHEDULED_PICKUP: 'processing',
+      IN_TRANSIT: 'processing',
+      DELIVERED: 'completed',
+      CANCELED: 'cancelled',
+      FAILED: 'failed',
+    };
+
+    return status ? (statusMap[status] ?? 'pending') : 'pending';
+  }
+
+  private toPostResponse(post: PostDocument | any) {
+    return {
+      id: post._id?.toString() ?? post.id,
+      authorType: post.authorType,
+      authorId: post.authorId?.toString(),
+      campaignId: post.campaignId?.toString(),
+      institutionId: post.institutionId?.toString(),
+      content: post.content,
+      media: post.media ?? [],
+      visibility: post.visibility,
+      stats: post.stats ?? { likesCount: 0, commentsCount: 0, sharesCount: 0 },
+      createdAt: post.createdAt?.toISOString?.() ?? post.createdAt,
+      updatedAt: post.updatedAt?.toISOString?.() ?? post.updatedAt,
+    };
+  }
+
+  private toAuditLogResponse(auditLog: AuditLogDocument | any) {
+    return {
+      id: auditLog._id?.toString() ?? auditLog.id,
+      actorUserId: auditLog.actorUserId?.toString(),
+      action: auditLog.action,
+      targetType: auditLog.targetType,
+      targetId: auditLog.targetId?.toString(),
+      metadata: auditLog.metadata,
+      createdAt: auditLog.createdAt?.toISOString?.() ?? auditLog.createdAt,
+    };
+  }
+
+  async findAll(query: PaginationQuery = {}) {
+    const pagination = getPaginationOptions(query);
+    const shouldReturnPaginated = shouldPaginate(query);
+    const filter: Record<string, unknown> = {};
+
+    if (pagination.search) {
+      filter.$or = [
+        { fullName: { $regex: pagination.search, $options: 'i' } },
+        { email: { $regex: pagination.search, $options: 'i' } },
+        { cpf: { $regex: pagination.search, $options: 'i' } },
+      ];
+    }
+
+    const users = await this.userModel
+      .find(filter)
+      .sort({ createdAt: pagination.sort === 'name' ? 1 : -1 })
+      .skip(shouldReturnPaginated ? pagination.skip : 0)
+      .limit(shouldReturnPaginated ? pagination.limit : 0)
+      .exec();
+    const items = users.map((user) => this.toPublicUser(user));
+
+    if (!shouldReturnPaginated) {
+      return items;
+    }
+
+    const [total, donorsCount, institutionStaffCount, platformAdminsCount] =
+      await Promise.all([
+        this.userModel.countDocuments(filter).exec(),
+        this.userModel.countDocuments({ roles: { $elemMatch: { name: UserRole.DONOR } } }).exec(),
+        this.userModel.countDocuments({ roles: { $elemMatch: { name: UserRole.INSTITUTION_STAFF } } }).exec(),
+        this.userModel.countDocuments({ roles: { $elemMatch: { name: UserRole.PLATFORM_ADMIN } } }).exec(),
+      ]);
+
+    return {
+      ...paginatedResponse(items, total, pagination),
+      summary: {
+        donorsCount,
+        institutionStaffCount,
+        platformAdminsCount,
+      },
+    };
   }
 
   findOne(id: string) {
     return this.userModel.findById(id).exec();
+  }
+
+  async findAdminDetail(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid user id');
+    }
+
+    const userId = new Types.ObjectId(id);
+    const user = await this.userModel.findById(userId).exec();
+
+    if (!user) {
+      return null;
+    }
+
+    const [donations, posts, auditLogs] = await Promise.all([
+      this.donationModel
+        .find({ donorUserId: userId })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean()
+        .exec(),
+      this.postModel
+        .find({ authorId: userId })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean()
+        .exec(),
+      this.auditLogModel
+        .find({
+          $or: [{ actorUserId: userId }, { targetId: userId }],
+        })
+        .sort({ createdAt: -1 })
+        .limit(30)
+        .lean()
+        .exec(),
+    ]);
+    const campaignIds = donations
+      .map((donation) => donation.campaignId?.toString())
+      .filter((value): value is string => Boolean(value));
+    const institutionIds = donations
+      .map((donation) => donation.institutionId?.toString())
+      .filter((value): value is string => Boolean(value));
+    const [campaigns, institutions] = await Promise.all([
+      this.campaignModel.find({ _id: { $in: campaignIds } }).lean().exec(),
+      this.institutionModel.find({ _id: { $in: institutionIds } }).lean().exec(),
+    ]);
+    const campaignMap = new Map(
+      campaigns.map((campaign) => [campaign._id.toString(), campaign]),
+    );
+    const institutionMap = new Map(
+      institutions.map((institution) => [institution._id.toString(), institution]),
+    );
+    const donationItems = donations.map((donation) => {
+      const amountCents = donation.moneyDonation?.amount
+        ? Math.round(donation.moneyDonation.amount * 100)
+        : 0;
+      const campaign = campaignMap.get(donation.campaignId?.toString() ?? '');
+      const institution = institutionMap.get(
+        donation.institutionId?.toString() ?? '',
+      );
+
+      return {
+        id: donation._id?.toString(),
+        amountCents,
+        amountFormatted: this.formatCurrency(amountCents),
+        campaignId: donation.campaignId?.toString(),
+        campaignTitle: campaign?.title ?? 'Campanha',
+        institutionName:
+          institution?.displayName || institution?.legalName || 'Instituição',
+        status: this.toAppDonationStatus(donation.status),
+        createdAt:
+          donation.createdAt?.toISOString?.() ?? donation.createdAt,
+      };
+    });
+
+    return {
+      user: this.toPublicUser(user),
+      donations: donationItems,
+      posts: posts.map((post) => this.toPostResponse(post)),
+      auditLogs: auditLogs.map((auditLog) => this.toAuditLogResponse(auditLog)),
+      stats: {
+        auditLogsCount: await this.auditLogModel
+          .countDocuments({ $or: [{ actorUserId: userId }, { targetId: userId }] })
+          .exec(),
+        donationsCount: await this.donationModel
+          .countDocuments({ donorUserId: userId })
+          .exec(),
+        postsCount: await this.postModel
+          .countDocuments({ authorId: userId })
+          .exec(),
+        totalDonatedCents: donationItems.reduce(
+          (total, donation) => total + donation.amountCents,
+          0,
+        ),
+      },
+    };
   }
 
   removeById(id: string) {

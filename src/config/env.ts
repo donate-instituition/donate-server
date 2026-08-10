@@ -1,5 +1,7 @@
 import 'dotenv/config';
 
+type AppEnvironment = 'local' | 'development' | 'preview' | 'production' | 'test';
+
 const getRequiredEnv = (key: string, fallback?: string): string => {
   const value = process.env[key]?.trim();
 
@@ -30,16 +32,87 @@ const getOptionalNumberEnv = (key: string, fallback: number): number => {
   return parsedValue;
 };
 
+const getOptionalEnv = (key: string): string | undefined => {
+  const value = process.env[key]?.trim();
+
+  return value || undefined;
+};
+
+const getAppEnvironment = (): AppEnvironment => {
+  const rawValue = (
+    process.env.APP_ENV ||
+    process.env.NODE_ENV ||
+    'local'
+  )
+    .trim()
+    .toLowerCase();
+
+  if (rawValue === 'prod') {
+    return 'production';
+  }
+
+  if (rawValue === 'dev') {
+    return 'development';
+  }
+
+  if (
+    rawValue === 'local' ||
+    rawValue === 'development' ||
+    rawValue === 'preview' ||
+    rawValue === 'production' ||
+    rawValue === 'test'
+  ) {
+    return rawValue;
+  }
+
+  return 'local';
+};
+
+const defaultMongoDatabaseByEnvironment: Record<AppEnvironment, string> = {
+  local: 'test',
+  development: 'test',
+  preview: 'test',
+  production: 'prod',
+  test: 'test',
+};
+
+const appendMongoDatabase = (clusterUri: string, database: string): string => {
+  const normalizedDatabase = database.replace(/^\/+/, '').replace(/\/+$/, '');
+
+  try {
+    const url = new URL(clusterUri);
+    url.pathname = `/${normalizedDatabase}`;
+
+    return url.toString();
+  } catch {
+    const queryIndex = clusterUri.indexOf('?');
+    const uriWithoutQuery =
+      queryIndex >= 0 ? clusterUri.slice(0, queryIndex) : clusterUri;
+    const query = queryIndex >= 0 ? clusterUri.slice(queryIndex) : '';
+
+    return `${uriWithoutQuery.replace(/\/+$/, '')}/${normalizedDatabase}${query}`;
+  }
+};
+
+const appEnvironment = getAppEnvironment();
+const mongodbDatabase =
+  getOptionalEnv('MONGODB_DATABASE') ||
+  defaultMongoDatabaseByEnvironment[appEnvironment];
+const mongodbClusterUri =
+  getOptionalEnv('MONGODB_CLUSTER_URI') || 'mongodb://127.0.0.1:27017';
+const mongodbUri =
+  getOptionalEnv('MONGODB_URI') ||
+  appendMongoDatabase(mongodbClusterUri, mongodbDatabase);
+
 export const env = {
+  appEnvironment,
   serviceName: process.env.SERVICE_NAME?.trim() || 'donate-server',
   serviceVersion:
     process.env.SERVICE_VERSION?.trim() ||
     process.env.npm_package_version ||
     '0.0.1',
-  mongodbUri: getRequiredEnv(
-    'MONGODB_URI',
-    'mongodb://127.0.0.1:27017/elodoar',
-  ),
+  mongodbDatabase,
+  mongodbUri,
   jwtSecret: getRequiredEnv('JWT_SECRET', 'dev-secret'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN?.trim() || '1d',
   port: getOptionalNumberEnv('PORT', 3000),

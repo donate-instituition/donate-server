@@ -8,6 +8,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { randomUUID } from 'crypto';
 
+import {
+  getPaginationOptions,
+  paginatedResponse,
+  type PaginationQuery,
+  shouldPaginate,
+} from '../../common/pagination';
 import { ObjectStorageService } from '../../storage/object-storage.service';
 import {
   InstitutionStaffMembershipRole,
@@ -421,11 +427,26 @@ export class CampaignsService {
     });
   }
 
-  async findAll() {
+  async findAll(query: PaginationQuery = {}) {
     await this.ensureSeedData();
+    const pagination = getPaginationOptions(query);
+    const shouldReturnPaginated = shouldPaginate(query);
+    const filter: Record<string, unknown> = {
+      status: CampaignStatus.PUBLISHED,
+    };
+
+    if (pagination.search) {
+      filter.$or = [
+        { title: { $regex: pagination.search, $options: 'i' } },
+        { description: { $regex: pagination.search, $options: 'i' } },
+      ];
+    }
+
     const campaigns = await this.campaignModel
-      .find({ status: CampaignStatus.PUBLISHED })
-      .sort({ createdAt: -1 })
+      .find(filter)
+      .sort({ createdAt: pagination.sort === 'oldest' ? 1 : -1 })
+      .skip(shouldReturnPaginated ? pagination.skip : 0)
+      .limit(shouldReturnPaginated ? pagination.limit : 0)
       .lean()
       .exec();
     const institutionIds = campaigns
@@ -442,20 +463,42 @@ export class CampaignsService {
       ]),
     );
 
-    return campaigns.map((campaign) =>
+    const items = campaigns.map((campaign) =>
       this.toAppCampaign(
         campaign,
         institutionMap.get(campaign.institutionId?.toString() ?? ''),
       ),
     );
+
+    if (!shouldReturnPaginated) {
+      return items;
+    }
+
+    const total = await this.campaignModel.countDocuments(filter).exec();
+    return paginatedResponse(items, total, pagination);
   }
 
-  async findMine(userId?: string) {
+  async findMine(userId?: string, query: PaginationQuery = {}) {
     await this.ensureSeedData();
     const membership = await this.findActiveMembership(userId);
+    const pagination = getPaginationOptions(query);
+    const shouldReturnPaginated = shouldPaginate(query);
+    const filter: Record<string, unknown> = {
+      institutionId: membership.institutionId,
+    };
+
+    if (pagination.search) {
+      filter.$or = [
+        { title: { $regex: pagination.search, $options: 'i' } },
+        { description: { $regex: pagination.search, $options: 'i' } },
+      ];
+    }
+
     const campaigns = await this.campaignModel
-      .find({ institutionId: membership.institutionId })
-      .sort({ createdAt: -1 })
+      .find(filter)
+      .sort({ createdAt: pagination.sort === 'oldest' ? 1 : -1 })
+      .skip(shouldReturnPaginated ? pagination.skip : 0)
+      .limit(shouldReturnPaginated ? pagination.limit : 0)
       .lean()
       .exec();
     const institution = await this.institutionModel
@@ -463,9 +506,16 @@ export class CampaignsService {
       .lean()
       .exec();
 
-    return campaigns.map((campaign) =>
+    const items = campaigns.map((campaign) =>
       this.toAppCampaign(campaign, institution),
     );
+
+    if (!shouldReturnPaginated) {
+      return items;
+    }
+
+    const total = await this.campaignModel.countDocuments(filter).exec();
+    return paginatedResponse(items, total, pagination);
   }
 
   async findOne(id: string) {
