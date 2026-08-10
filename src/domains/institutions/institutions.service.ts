@@ -9,6 +9,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import Stripe from 'stripe';
 
+import { institutionCacheKey, RedisService } from '../../cache';
 import {
   getPaginationOptions,
   paginatedResponse,
@@ -49,7 +50,12 @@ export class InstitutionsService {
     private readonly auditLogModel: Model<AuditLogDocument>,
     @InjectModel(InstitutionStaffMembership.name)
     private readonly institutionStaffMembershipModel: Model<InstitutionStaffMembershipDocument>,
+    private readonly redisService: RedisService,
   ) {}
+
+  private async invalidateInstitutionCache(id: string) {
+    await this.redisService.del(institutionCacheKey(id)).catch(() => undefined);
+  }
 
   private getStripeClient() {
     if (!env.stripeSecretKey) {
@@ -434,8 +440,33 @@ export class InstitutionsService {
     return paginatedResponse(items, total, pagination);
   }
 
+  /**
+   * Cache-aside profile read. Stripe fields are deliberately never part of
+   * the cached payload — they're fetched live from Mongo on every call
+   * (cache hit or miss) and merged in afterward, so this endpoint never
+   * depends on Redis for Stripe/bank-adjacent data.
+   */
   async findOne(id: string) {
     await this.ensureSeedData();
+    const base = await this.redisService.cacheAside(
+      institutionCacheKey(id),
+      env.institutionCacheTtlSeconds,
+      () => this.loadFindOne(id),
+    );
+    const stripeState = await this.institutionModel
+      .findById(id)
+      .select('stripeConnect stripeConnectAccountId')
+      .lean()
+      .exec();
+
+    return {
+      ...base,
+      stripeConnect: this.toAppStripeConnect(stripeState ?? {}),
+      stripeConnectAccountId: stripeState?.stripeConnectAccountId,
+    };
+  }
+
+  private async loadFindOne(id: string) {
     const institution = await this.institutionModel.findById(id).lean().exec();
 
     if (!institution) {
@@ -447,12 +478,15 @@ export class InstitutionsService {
       .sort({ createdAt: -1 })
       .lean()
       .exec();
+    const { stripeConnect, stripeConnectAccountId, ...appInstitution } =
+      this.toAppInstitution(institution);
+    void stripeConnect;
+    void stripeConnectAccountId;
 
     return {
-      ...this.toAppInstitution(institution),
+      ...appInstitution,
       foundedYear: 2010,
       email: institution.email,
-      stripeConnectAccountId: institution.stripeConnectAccountId,
       website: institution.website ?? undefined,
       activeCampaigns: campaigns.filter(
         (campaign) => campaign.status === CampaignStatus.PUBLISHED,
@@ -486,7 +520,7 @@ export class InstitutionsService {
         throw new BadRequestException('A conta Stripe informada foi removida.');
       }
 
-      account = retrievedAccount as Stripe.Account;
+      account = retrievedAccount;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -530,13 +564,16 @@ export class InstitutionsService {
       throw new NotFoundException(`Instituição ${id} não encontrada.`);
     }
 
+    await this.invalidateInstitutionCache(id);
     return this.findOne(updatedInstitution._id.toString());
   }
 
-  update(id: string, updateInstitutionDto: UpdateInstitutionDto) {
-    return this.institutionModel
+  async update(id: string, updateInstitutionDto: UpdateInstitutionDto) {
+    const institution = await this.institutionModel
       .findByIdAndUpdate(id, updateInstitutionDto, { returnDocument: 'after' })
       .exec();
+    await this.invalidateInstitutionCache(id);
+    return institution;
   }
 
   async approve(id: string, actorUserId?: string) {
@@ -572,6 +609,7 @@ export class InstitutionsService {
       },
     });
 
+    await this.invalidateInstitutionCache(id);
     return {
       ...this.toAppInstitution(institution),
       cnpj: institution.cnpj,
@@ -607,6 +645,7 @@ export class InstitutionsService {
       },
     });
 
+    await this.invalidateInstitutionCache(id);
     return {
       ...this.toAppInstitution(institution),
       cnpj: institution.cnpj,
@@ -615,7 +654,11 @@ export class InstitutionsService {
     };
   }
 
-  remove(id: string) {
-    return this.institutionModel.findByIdAndDelete(id).exec();
+  async remove(id: string) {
+    const institution = await this.institutionModel
+      .findByIdAndDelete(id)
+      .exec();
+    await this.invalidateInstitutionCache(id);
+    return institution;
   }
 }
