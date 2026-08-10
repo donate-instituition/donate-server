@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { Model } from 'mongoose';
 
+import { RedisService } from '../../../cache';
 import { env } from '../../../config/env';
 import { PrettyLogger } from '../../logger';
 import {
@@ -13,6 +14,13 @@ import {
 } from '../schemas/idempotency-record.schema';
 
 type CachedResponseType = 'json' | 'send';
+
+type CachedIdempotentResponse = {
+  fingerprint: string;
+  responseBody: unknown;
+  responseStatusCode: number;
+  responseType: CachedResponseType;
+};
 
 const IDEMPOTENCY_HEADER = 'idempotency-key';
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -109,7 +117,35 @@ export class IdempotencyMiddleware implements NestMiddleware {
   constructor(
     @InjectModel(IdempotencyRecord.name)
     private readonly idempotencyRecordModel: Model<IdempotencyRecordDocument>,
+    private readonly redisService: RedisService,
   ) {}
+
+  /**
+   * Redis cache key for a completed response — a read-through accelerator
+   * only. Mongo (via `idempotencyRecordModel`) stays the single source of
+   * truth for correctness (duplicate detection, conflict detection,
+   * in-progress locking); this just saves a Mongo round trip on retries.
+   */
+  private redisKey(
+    scope: string,
+    method: string,
+    path: string,
+    idempotencyKey: string,
+  ) {
+    return `idempotency:${scope}:${method}:${path}:${idempotencyKey}`;
+  }
+
+  private replay(response: Response, cached: CachedIdempotentResponse) {
+    response.setHeader('Idempotency-Replayed', 'true');
+    response.status(cached.responseStatusCode);
+
+    if (cached.responseType === 'send') {
+      response.send(cached.responseBody);
+      return;
+    }
+
+    response.json(cached.responseBody);
+  }
 
   async use(request: Request, response: Response, next: NextFunction) {
     if (!MUTATION_METHODS.has(request.method.toUpperCase())) {
@@ -134,6 +170,16 @@ export class IdempotencyMiddleware implements NestMiddleware {
       path,
       scope,
     };
+    const redisKey = this.redisKey(scope, method, path, idempotencyKey);
+
+    const cached = await this.redisService
+      .get<CachedIdempotentResponse>(redisKey)
+      .catch(() => null);
+
+    if (cached && cached.fingerprint === fingerprint) {
+      this.replay(response, cached);
+      return;
+    }
 
     try {
       await this.idempotencyRecordModel.create({
@@ -217,7 +263,13 @@ export class IdempotencyMiddleware implements NestMiddleware {
             scope,
             status: IdempotencyRecordStatus.InProgress,
           });
-          this.captureResponse(request, response, filter);
+          this.captureResponse(
+            request,
+            response,
+            filter,
+            redisKey,
+            fingerprint,
+          );
           next();
           return;
         } catch (retryError) {
@@ -263,7 +315,6 @@ export class IdempotencyMiddleware implements NestMiddleware {
         return;
       }
 
-      response.setHeader('Idempotency-Replayed', 'true');
       this.logger.debug(
         'Idempotency response replayed',
         IdempotencyMiddleware.name,
@@ -275,20 +326,29 @@ export class IdempotencyMiddleware implements NestMiddleware {
           statusCode: existingRecord.responseStatusCode,
         },
       );
-      response.status(existingRecord.responseStatusCode ?? 200);
 
-      if (existingRecord.responseType === 'send') {
-        response.send(existingRecord.responseBody);
-        return;
-      }
+      const cachedResponse: CachedIdempotentResponse = {
+        fingerprint,
+        responseBody: existingRecord.responseBody,
+        responseStatusCode: existingRecord.responseStatusCode ?? 200,
+        responseType: existingRecord.responseType ?? 'json',
+      };
 
-      response.json(existingRecord.responseBody);
+      // Warm Redis from the Mongo record so the next retry skips Mongo entirely.
+      this.redisService
+        .set(redisKey, cachedResponse, this.idempotencyTtlSeconds())
+        .catch(() => undefined);
+      this.replay(response, cachedResponse);
       return;
     }
 
-    this.captureResponse(request, response, filter);
+    this.captureResponse(request, response, filter, redisKey, fingerprint);
 
     next();
+  }
+
+  private idempotencyTtlSeconds() {
+    return Math.ceil(env.idempotencyTtlMs / 1000);
   }
 
   private captureResponse(
@@ -300,6 +360,8 @@ export class IdempotencyMiddleware implements NestMiddleware {
       path: string;
       scope: string;
     },
+    redisKey: string,
+    fingerprint: string,
   ) {
     let responseBody: unknown;
     let responseType: CachedResponseType = 'json';
@@ -361,6 +423,18 @@ export class IdempotencyMiddleware implements NestMiddleware {
           },
         })
         .exec();
+      this.redisService
+        .set<CachedIdempotentResponse>(
+          redisKey,
+          {
+            fingerprint,
+            responseBody,
+            responseStatusCode: response.statusCode,
+            responseType,
+          },
+          this.idempotencyTtlSeconds(),
+        )
+        .catch(() => undefined);
     });
 
     request.on('aborted', () => {

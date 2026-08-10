@@ -80,10 +80,21 @@ function createModelMock() {
   };
 }
 
+function createRedisServiceMock(cached: unknown = null) {
+  return {
+    get: jest.fn().mockResolvedValue(cached),
+    set: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe('IdempotencyMiddleware', () => {
   it('creates an in-progress record and completes it when the response finishes', async () => {
     const model = createModelMock();
-    const middleware = new IdempotencyMiddleware(model as never);
+    const redisService = createRedisServiceMock();
+    const middleware = new IdempotencyMiddleware(
+      model as never,
+      redisService as never,
+    );
     const request = createRequest();
     const response = createResponse();
     const next: NextFunction = jest.fn();
@@ -125,7 +136,11 @@ describe('IdempotencyMiddleware', () => {
 
   it('replays a completed response from Mongo', async () => {
     const model = createModelMock();
-    const middleware = new IdempotencyMiddleware(model as never);
+    const redisService = createRedisServiceMock();
+    const middleware = new IdempotencyMiddleware(
+      model as never,
+      redisService as never,
+    );
     const response = createResponse();
     const next: NextFunction = jest.fn();
 
@@ -148,7 +163,11 @@ describe('IdempotencyMiddleware', () => {
 
   it('returns 409 when the key is reused with a different request body', async () => {
     const model = createModelMock();
-    const middleware = new IdempotencyMiddleware(model as never);
+    const redisService = createRedisServiceMock();
+    const middleware = new IdempotencyMiddleware(
+      model as never,
+      redisService as never,
+    );
     const response = createResponse();
     const next: NextFunction = jest.fn();
 
@@ -171,7 +190,11 @@ describe('IdempotencyMiddleware', () => {
 
   it('returns 409 when the first request is still in progress', async () => {
     const model = createModelMock();
-    const middleware = new IdempotencyMiddleware(model as never);
+    const redisService = createRedisServiceMock();
+    const middleware = new IdempotencyMiddleware(
+      model as never,
+      redisService as never,
+    );
     const response = createResponse();
     const next: NextFunction = jest.fn();
 
@@ -190,7 +213,11 @@ describe('IdempotencyMiddleware', () => {
 
   it('starts a new request when the matching record has already expired', async () => {
     const model = createModelMock();
-    const middleware = new IdempotencyMiddleware(model as never);
+    const redisService = createRedisServiceMock();
+    const middleware = new IdempotencyMiddleware(
+      model as never,
+      redisService as never,
+    );
     const response = createResponse();
     const next: NextFunction = jest.fn();
 
@@ -218,7 +245,11 @@ describe('IdempotencyMiddleware', () => {
 
   it('ignores mutation requests without an idempotency key', async () => {
     const model = createModelMock();
-    const middleware = new IdempotencyMiddleware(model as never);
+    const redisService = createRedisServiceMock();
+    const middleware = new IdempotencyMiddleware(
+      model as never,
+      redisService as never,
+    );
     const request = createRequest();
     const next: NextFunction = jest.fn();
 
@@ -227,6 +258,60 @@ describe('IdempotencyMiddleware', () => {
     await middleware.use(request, createResponse(), next);
 
     expect(model.create).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('replays from Redis without touching Mongo when the fingerprint matches', async () => {
+    const model = createModelMock();
+    const redisService = createRedisServiceMock({
+      fingerprint: DEFAULT_REQUEST_FINGERPRINT,
+      responseBody: { donationId: 'don-1' },
+      responseStatusCode: 201,
+      responseType: 'json',
+    });
+    const middleware = new IdempotencyMiddleware(
+      model as never,
+      redisService as never,
+    );
+    const response = createResponse();
+    const next: NextFunction = jest.fn();
+
+    await middleware.use(createRequest(), response, next);
+
+    expect(model.create).not.toHaveBeenCalled();
+    expect(model.findOne).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+    expect(response.headers.get('Idempotency-Replayed')).toBe('true');
+    expect(response.status).toHaveBeenCalledWith(201);
+    expect(response.json).toHaveBeenCalledWith({ donationId: 'don-1' });
+  });
+
+  it('falls through to Mongo when the cached fingerprint does not match', async () => {
+    const model = createModelMock();
+    const redisService = createRedisServiceMock({
+      fingerprint: 'different-fingerprint',
+      responseBody: { donationId: 'stale' },
+      responseStatusCode: 201,
+      responseType: 'json',
+    });
+    const middleware = new IdempotencyMiddleware(
+      model as never,
+      redisService as never,
+    );
+    const request = createRequest();
+    const response = createResponse();
+    const next: NextFunction = jest.fn();
+
+    await middleware.use(request, response, next);
+    response.status(201).json({ donationId: 'don-1' });
+    response.events.get('finish')?.();
+
+    expect(model.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: 'idem-1',
+        status: IdempotencyRecordStatus.InProgress,
+      }),
+    );
     expect(next).toHaveBeenCalledTimes(1);
   });
 });
