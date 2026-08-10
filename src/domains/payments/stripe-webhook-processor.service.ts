@@ -9,6 +9,11 @@ import { Channel, ChannelModel, connect } from 'amqplib';
 import { Model } from 'mongoose';
 import Stripe from 'stripe';
 
+import {
+  campaignCacheKey,
+  institutionCacheKey,
+  RedisService,
+} from '../../cache';
 import { env } from '../../config/env';
 import { AppSettingKey } from '../app-settings/app-settings.defaults';
 import { AppSettingsService } from '../app-settings/app-settings.service';
@@ -68,6 +73,7 @@ export class StripeWebhookProcessorService
     private readonly institutionModel: Model<InstitutionDocument>,
     private readonly appSettingsService: AppSettingsService,
     private readonly rabbitMqPublisher: RabbitMqPublisherService,
+    private readonly redisService: RedisService,
   ) {}
 
   async onModuleInit() {
@@ -259,6 +265,13 @@ export class StripeWebhookProcessorService
       })
       .exec();
 
+    if (donation.campaignId) {
+      await Promise.all([
+        this.redisService.del(campaignCacheKey(donation.campaignId.toString())),
+        this.redisService.increment('cache:version:campaigns'),
+      ]).catch(() => undefined);
+    }
+
     this.logger.log(
       JSON.stringify({
         event: 'stripe_payment_intent_marked_paid',
@@ -278,36 +291,45 @@ export class StripeWebhookProcessorService
     const requirementsCurrentlyDue =
       account.requirements?.currently_due?.filter(Boolean) ?? [];
     const ready = Boolean(account.charges_enabled && account.details_submitted);
+    const matchFilter = {
+      $or: [
+        { stripeConnectAccountId: account.id },
+        { 'stripeConnect.accountId': account.id },
+      ],
+    };
+    const affectedInstitutionIds = await this.institutionModel
+      .find(matchFilter)
+      .select('_id')
+      .lean()
+      .exec();
 
     await this.institutionModel
-      .updateMany(
-        {
-          $or: [
-            { stripeConnectAccountId: account.id },
-            { 'stripeConnect.accountId': account.id },
-          ],
-        },
-        {
-          $set: {
-            stripeConnectAccountId: account.id,
-            stripeConnect: {
-              accountId: account.id,
-              chargesEnabled: Boolean(account.charges_enabled),
-              country: account.country,
-              defaultCurrency: account.default_currency,
-              detailsSubmitted: Boolean(account.details_submitted),
-              exists: true,
-              livemode: env.stripeSecretKey.startsWith('sk_live_'),
-              payoutsEnabled: Boolean(account.payouts_enabled),
-              ready,
-              requirementsCurrentlyDue,
-              requirementsDisabledReason: account.requirements?.disabled_reason,
-              verifiedAt: new Date(),
-            },
+      .updateMany(matchFilter, {
+        $set: {
+          stripeConnectAccountId: account.id,
+          stripeConnect: {
+            accountId: account.id,
+            chargesEnabled: Boolean(account.charges_enabled),
+            country: account.country,
+            defaultCurrency: account.default_currency,
+            detailsSubmitted: Boolean(account.details_submitted),
+            exists: true,
+            livemode: env.stripeSecretKey.startsWith('sk_live_'),
+            payoutsEnabled: Boolean(account.payouts_enabled),
+            ready,
+            requirementsCurrentlyDue,
+            requirementsDisabledReason: account.requirements?.disabled_reason,
+            verifiedAt: new Date(),
           },
         },
-      )
+      })
       .exec();
+
+    await Promise.all(
+      affectedInstitutionIds.map((institution) =>
+        this.redisService.del(institutionCacheKey(institution._id.toString())),
+      ),
+    ).catch(() => undefined);
   }
 
   private async handlePaymentIntentTerminalFailure(
