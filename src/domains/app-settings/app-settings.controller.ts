@@ -23,7 +23,10 @@ export class AppSettingsController {
 
   @Roles(UserRole.PLATFORM_ADMIN)
   @Put(':key')
-  upsert(@Param('key') key: string, @Body() body: Omit<UpsertAppSettingDto, 'key'>) {
+  upsert(
+    @Param('key') key: string,
+    @Body() body: Omit<UpsertAppSettingDto, 'key'>,
+  ) {
     return this.appSettingsService.upsert({ ...body, key });
   }
 }

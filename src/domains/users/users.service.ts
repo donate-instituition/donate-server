@@ -93,7 +93,7 @@ function normalizeRoleGrants(
 }
 
 function normalizeSettings(
-  settings: CreateUserDto['settings'] | UpdateUserDto['settings'] | undefined,
+  settings: CreateUserDto['settings'] | undefined,
   roles: UserRoleGrant[],
 ) {
   if (!settings) {
@@ -160,9 +160,7 @@ export class UsersService implements OnModuleInit {
               ? [user.role]
               : [UserRole.DONOR];
 
-        const roleGrants = normalizeRoleGrants(
-          rawRoles as Array<UserRole | UserRoleGrantInput>,
-        );
+        const roleGrants = normalizeRoleGrants(rawRoles);
 
         return this.userModel
           .updateOne(
@@ -315,9 +313,7 @@ export class UsersService implements OnModuleInit {
       return null;
     }
 
-    const roles = normalizeRoleGrants(
-      user.roles as Array<UserRole | UserRoleGrantInput>,
-    );
+    const roles = normalizeRoleGrants(user.roles);
     const roleNames = roles.map((role) => role.name);
 
     if (!roleNames.includes(preferredRole)) {

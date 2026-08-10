@@ -16,7 +16,9 @@ export class TermsService {
   ) {}
 
   private async setOnlyCurrent(termId: Types.ObjectId) {
-    await this.termModel.updateMany({ _id: { $ne: termId } }, { $set: { isCurrent: false } }).exec();
+    await this.termModel
+      .updateMany({ _id: { $ne: termId } }, { $set: { isCurrent: false } })
+      .exec();
     await this.usersService.markTermsPendingForVersionChange();
   }
 
@@ -30,7 +32,9 @@ export class TermsService {
     }
 
     const term = await this.termModel.create({
-      title: createTermDto.title?.trim() || 'Termos de Uso e Política de Privacidade',
+      title:
+        createTermDto.title?.trim() ||
+        'Termos de Uso e Política de Privacidade',
       version: createTermDto.version.trim(),
       content: createTermDto.content,
       isCurrent: Boolean(createTermDto.isCurrent),
@@ -49,7 +53,10 @@ export class TermsService {
   }
 
   async findCurrent() {
-    const term = await this.termModel.findOne({ isCurrent: true }).sort({ publishedAt: -1, createdAt: -1 }).exec();
+    const term = await this.termModel
+      .findOne({ isCurrent: true })
+      .sort({ publishedAt: -1, createdAt: -1 })
+      .exec();
 
     if (!term) {
       throw new NotFoundException('No current terms found');
@@ -75,13 +82,18 @@ export class TermsService {
       throw new NotFoundException('Term not found');
     }
 
-    if (updateTermDto.title !== undefined) term.title = updateTermDto.title.trim();
-    if (updateTermDto.version !== undefined) term.version = updateTermDto.version.trim();
-    if (updateTermDto.content !== undefined) term.content = updateTermDto.content;
+    if (updateTermDto.title !== undefined)
+      term.title = updateTermDto.title.trim();
+    if (updateTermDto.version !== undefined)
+      term.version = updateTermDto.version.trim();
+    if (updateTermDto.content !== undefined)
+      term.content = updateTermDto.content;
 
     if (updateTermDto.isCurrent !== undefined) {
       term.isCurrent = updateTermDto.isCurrent;
-      term.publishedAt = updateTermDto.isCurrent ? new Date() : term.publishedAt;
+      term.publishedAt = updateTermDto.isCurrent
+        ? new Date()
+        : term.publishedAt;
     }
 
     await term.save();

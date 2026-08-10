@@ -1,10 +1,21 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
-import { CreateSupportFaqDto, SupportFaqItemDto } from './dto/create-support-faq.dto';
+import {
+  CreateSupportFaqDto,
+  SupportFaqItemDto,
+} from './dto/create-support-faq.dto';
 import { UpdateSupportFaqDto } from './dto/update-support-faq.dto';
-import { SupportFaq, SupportFaqDocument, SupportFaqItem } from './schemas/support-faq.schema';
+import {
+  SupportFaq,
+  SupportFaqDocument,
+  SupportFaqItem,
+} from './schemas/support-faq.schema';
 
 function normalizeItems(items?: SupportFaqItemDto[]): SupportFaqItem[] {
   if (!items?.length) {
@@ -90,13 +101,18 @@ export class SupportFaqsService {
       throw new NotFoundException('Support FAQ not found');
     }
 
-    if (updateSupportFaqDto.title !== undefined) supportFaq.title = updateSupportFaqDto.title.trim();
-    if (updateSupportFaqDto.version !== undefined) supportFaq.version = updateSupportFaqDto.version.trim();
-    if (updateSupportFaqDto.items !== undefined) supportFaq.items = normalizeItems(updateSupportFaqDto.items);
+    if (updateSupportFaqDto.title !== undefined)
+      supportFaq.title = updateSupportFaqDto.title.trim();
+    if (updateSupportFaqDto.version !== undefined)
+      supportFaq.version = updateSupportFaqDto.version.trim();
+    if (updateSupportFaqDto.items !== undefined)
+      supportFaq.items = normalizeItems(updateSupportFaqDto.items);
 
     if (updateSupportFaqDto.isCurrent !== undefined) {
       supportFaq.isCurrent = updateSupportFaqDto.isCurrent;
-      supportFaq.publishedAt = updateSupportFaqDto.isCurrent ? new Date() : supportFaq.publishedAt;
+      supportFaq.publishedAt = updateSupportFaqDto.isCurrent
+        ? new Date()
+        : supportFaq.publishedAt;
     }
 
     await supportFaq.save();

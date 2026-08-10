@@ -31,4 +31,5 @@ export class RefreshTokenSession {
   updatedAt!: Date;
 }
 
-export const RefreshTokenSessionSchema = SchemaFactory.createForClass(RefreshTokenSession);
+export const RefreshTokenSessionSchema =
+  SchemaFactory.createForClass(RefreshTokenSession);

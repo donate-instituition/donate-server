@@ -35,7 +35,10 @@ import {
       { name: RefreshTokenSession.name, schema: RefreshTokenSessionSchema },
       { name: PasswordResetRequest.name, schema: PasswordResetRequestSchema },
       { name: Institution.name, schema: InstitutionSchema },
-      { name: InstitutionStaffMembership.name, schema: InstitutionStaffMembershipSchema },
+      {
+        name: InstitutionStaffMembership.name,
+        schema: InstitutionStaffMembershipSchema,
+      },
     ]),
   ],
   controllers: [AuthController],
@@ -52,4 +55,4 @@ import {
   ],
   exports: [AuthService],
 })
-export class AuthModule { }
+export class AuthModule {}

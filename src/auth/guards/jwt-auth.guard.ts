@@ -46,7 +46,10 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Authentication token is invalid');
     }
 
-    if (request.user.passwordChangeRequired && !this.isPasswordChangeRoute(request)) {
+    if (
+      request.user.passwordChangeRequired &&
+      !this.isPasswordChangeRoute(request)
+    ) {
       throw new ForbiddenException({
         statusCode: 403,
         code: 'PASSWORD_CHANGE_REQUIRED',

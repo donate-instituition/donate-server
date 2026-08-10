@@ -28,9 +28,13 @@ describe('AuthService', () => {
         sendTemporaryPasswordEmail: jest.fn().mockResolvedValue(undefined),
         ...(overrides.emailJobsService ?? {}),
       } as never,
-      (overrides.auditLogsService ?? { create: jest.fn().mockResolvedValue({}) }) as never,
+      (overrides.auditLogsService ?? {
+        create: jest.fn().mockResolvedValue({}),
+      }) as never,
       (overrides.appSettingsService ?? {
-        getString: jest.fn().mockImplementation((_, fallback) => Promise.resolve(fallback)),
+        getString: jest
+          .fn()
+          .mockImplementation((_, fallback) => Promise.resolve(fallback)),
       }) as never,
       (overrides.refreshTokenSessionModel ?? {}) as never,
       (overrides.passwordResetRequestModel ?? {}) as never,
@@ -71,9 +75,17 @@ describe('AuthService', () => {
     } as unknown as UsersService;
     const refreshTokenSessionModel = {
       create: jest.fn().mockResolvedValue({}),
-      find: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }) }),
-      findByIdAndUpdate: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({}) }),
-      updateMany: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({}) }),
+      find: jest.fn().mockReturnValue({
+        lean: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
+      }),
+      findByIdAndUpdate: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue({}) }),
+      updateMany: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue({}) }),
     };
     const passwordResetRequestModel = {};
     const emailJobsService = {
@@ -144,7 +156,9 @@ describe('AuthService', () => {
     const usersService = {
       findByEmail: jest.fn().mockResolvedValue(user),
     } as unknown as UsersService;
-    const authService = createAuthService({ usersService: usersService as never });
+    const authService = createAuthService({
+      usersService: usersService as never,
+    });
 
     await expect(
       authService.login({

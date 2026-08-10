@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 
 import { Public } from '../../auth/decorators/public.decorator';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -37,7 +45,10 @@ export class SupportFaqsController {
 
   @Roles(UserRole.PLATFORM_ADMIN)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateSupportFaqDto: UpdateSupportFaqDto) {
+  update(
+    @Param('id') id: string,
+    @Body() updateSupportFaqDto: UpdateSupportFaqDto,
+  ) {
     return this.supportFaqsService.update(id, updateSupportFaqDto);
   }
 

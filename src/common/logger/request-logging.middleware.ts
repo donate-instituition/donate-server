@@ -31,10 +31,14 @@ export class RequestLoggingMiddleware implements NestMiddleware {
     request.headers['x-request-id'] = requestId;
     response.setHeader('X-Request-Id', requestId);
 
-    this.logger.debug(`${request.method} ${path} started`, RequestLoggingMiddleware.name, {
-      idempotencyKey,
-      requestId,
-    });
+    this.logger.debug(
+      `${request.method} ${path} started`,
+      RequestLoggingMiddleware.name,
+      {
+        idempotencyKey,
+        requestId,
+      },
+    );
 
     response.on('finish', () => {
       const durationMs = Date.now() - startedAt;
@@ -47,7 +51,12 @@ export class RequestLoggingMiddleware implements NestMiddleware {
       const message = `${request.method} ${path} ${response.statusCode} ${durationMs}ms`;
 
       if (response.statusCode >= 500) {
-        this.logger.error(message, undefined, RequestLoggingMiddleware.name, metadata);
+        this.logger.error(
+          message,
+          undefined,
+          RequestLoggingMiddleware.name,
+          metadata,
+        );
         return;
       }
 

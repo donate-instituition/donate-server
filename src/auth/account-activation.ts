@@ -23,7 +23,8 @@ export function createAccountActivationToken(userId: string, version: string) {
 export function createAccountActivationUrl(
   userId: string,
   version: string,
-  baseUrl = env.emailAccountActivationUrl || 'http://localhost:3000/auth/activate-account',
+  baseUrl = env.emailAccountActivationUrl ||
+    'http://localhost:3000/auth/activate-account',
 ) {
   const separator = baseUrl.includes('?') ? '&' : '?';
 
@@ -33,7 +34,11 @@ export function createAccountActivationUrl(
 export function verifyAccountActivationToken(token: string) {
   const payload = verify(token, env.jwtSecret) as AccountActivationPayload;
 
-  if (payload.purpose !== 'activate-account' || !payload.sub || !payload.version) {
+  if (
+    payload.purpose !== 'activate-account' ||
+    !payload.sub ||
+    !payload.version
+  ) {
     throw new Error('Invalid account activation token');
   }
 

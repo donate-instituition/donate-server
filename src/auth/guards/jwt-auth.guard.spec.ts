@@ -51,9 +51,9 @@ describe('JwtAuthGuard', () => {
       env.jwtSecret,
     );
 
-    expect(() => guard.canActivate(createExecutionContext(`Bearer ${token}`))).toThrow(
-      ForbiddenException,
-    );
+    expect(() =>
+      guard.canActivate(createExecutionContext(`Bearer ${token}`)),
+    ).toThrow(ForbiddenException);
   });
 
   it('allows password change route when password change is required', () => {

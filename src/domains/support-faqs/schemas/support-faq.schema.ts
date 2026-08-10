@@ -15,7 +15,8 @@ export class SupportFaqItem {
   order!: number;
 }
 
-export const SupportFaqItemSchema = SchemaFactory.createForClass(SupportFaqItem);
+export const SupportFaqItemSchema =
+  SchemaFactory.createForClass(SupportFaqItem);
 
 @Schema({
   collection: 'support_faqs',

@@ -82,7 +82,9 @@ import { StorageModule } from './storage/storage.module';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RequestLoggingMiddleware, IdempotencyMiddleware).forRoutes('*');
+    consumer
+      .apply(RequestLoggingMiddleware, IdempotencyMiddleware)
+      .forRoutes('*');
 
     consumer
       .apply(

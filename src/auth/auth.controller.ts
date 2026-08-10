@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Header, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -11,7 +19,7 @@ import type { AuthenticatedUser } from './types/authenticated-user.type';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Public()
   @Post('login')
@@ -86,7 +94,10 @@ export class AuthController {
   }
 
   @Post('logout')
-  logout(@Body() body: { refreshToken?: string }, @CurrentUser() user: AuthenticatedUser | undefined) {
+  logout(
+    @Body() body: { refreshToken?: string },
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
     return this.authService.logout(body.refreshToken, user?.sub);
   }
 

@@ -22,7 +22,8 @@ export const appSettingDefaults = [
     key: AppSettingKey.EMAIL_SUPPORT_PHONE,
     value: env.emailSupportPhone,
     valueType: AppSettingValueType.STRING,
-    description: 'Telefone/WhatsApp exibido nos canais de suporte e rodapé dos e-mails.',
+    description:
+      'Telefone/WhatsApp exibido nos canais de suporte e rodapé dos e-mails.',
   },
   {
     key: AppSettingKey.EMAIL_PUBLIC_APP_URL,

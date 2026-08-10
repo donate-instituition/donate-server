@@ -704,7 +704,7 @@ export class AuthService implements OnModuleInit {
     for (const session of sessions) {
       const matches = await compare(refreshToken, session.refreshTokenHash);
       if (matches && (!session.revokedAt || session.revokedAt > new Date())) {
-        matchingSession = session as RefreshTokenSessionDocument;
+        matchingSession = session;
         break;
       }
     }

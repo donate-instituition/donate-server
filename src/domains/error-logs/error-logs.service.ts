@@ -28,7 +28,10 @@ export class ErrorLogsService {
     try {
       return await this.errorLogModel.create(createErrorLogDto);
     } catch (error) {
-      this.logger.error('Failed to persist error log', error instanceof Error ? error.stack : String(error));
+      this.logger.error(
+        'Failed to persist error log',
+        error instanceof Error ? error.stack : String(error),
+      );
       return null;
     }
   }
