@@ -3,6 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
+import { createQueueMessage } from '../../queues/queue-message';
+import { RabbitMqPublisherService } from '../../queues/rabbitmq-publisher.service';
 
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
@@ -16,13 +18,57 @@ export class NotificationsService {
   constructor(
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
+    private readonly rabbitMqPublisherService: RabbitMqPublisherService,
   ) {}
 
   async create(createNotificationDto: CreateNotificationDto) {
     const notification = await this.notificationModel.create(
       createNotificationDto,
     );
+    await this.publishPushJob(notification);
+
     return this.serialize(notification);
+  }
+
+  async createOnceByDataField(
+    field: string,
+    value: string,
+    createNotificationDto: CreateNotificationDto,
+  ) {
+    const existingNotification = await this.notificationModel
+      .findOne({ [`data.${field}`]: value })
+      .exec();
+
+    if (existingNotification) {
+      return this.serialize(existingNotification);
+    }
+
+    const notification = await this.notificationModel.create(
+      createNotificationDto,
+    );
+    await this.publishPushJob(notification);
+
+    return this.serialize(notification);
+  }
+
+  private async publishPushJob(notification: NotificationDocument) {
+    await this.rabbitMqPublisherService.publish(
+      'notification.push',
+      createQueueMessage({
+        type: 'notification.push',
+        payload: {
+          body: notification.body,
+          data: {
+            ...(notification.data ?? {}),
+            notificationId: notification._id.toString(),
+            type: notification.type,
+          },
+          notificationId: notification._id.toString(),
+          title: notification.title,
+          userId: notification.userId.toString(),
+        },
+      }),
+    );
   }
 
   async findMine(currentUser?: AuthenticatedUser) {

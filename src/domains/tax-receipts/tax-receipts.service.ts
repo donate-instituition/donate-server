@@ -25,10 +25,7 @@ import {
   InstitutionDocument,
 } from '../institutions/schemas/institution.schema';
 import { NotificationType } from '../notifications/models';
-import {
-  Notification,
-  NotificationDocument,
-} from '../notifications/schemas/notification.schema';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { TaxReceiptType } from './models';
@@ -61,8 +58,7 @@ export class TaxReceiptsService {
     @InjectModel(Institution.name)
     private readonly institutionModel: Model<InstitutionDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectModel(Notification.name)
-    private readonly notificationModel: Model<NotificationDocument>,
+    private readonly notificationsService: NotificationsService,
     private readonly emailJobsService: EmailJobsService,
     private readonly objectStorage: ObjectStorageService,
   ) {}
@@ -316,25 +312,21 @@ export class TaxReceiptsService {
     },
   ) {
     if (donor.settings?.notifications?.push !== false) {
-      await this.notificationModel
-        .updateOne(
-          { 'data.receiptNumber': receipt.receiptNumber },
-          {
-            $setOnInsert: {
-              body: `Sua doação para ${input.campaignTitle} foi confirmada.`,
-              data: {
-                donationId: receipt.donationId.toString(),
-                receiptId: receipt._id.toString(),
-                receiptNumber: receipt.receiptNumber,
-              },
-              title: 'Doação confirmada',
-              type: NotificationType.DONATION_STATUS_UPDATED,
-              userId: receipt.donorUserId,
-            },
+      await this.notificationsService.createOnceByDataField(
+        'receiptNumber',
+        receipt.receiptNumber,
+        {
+          body: `Sua doação para ${input.campaignTitle} foi confirmada.`,
+          data: {
+            donationId: receipt.donationId.toString(),
+            receiptId: receipt._id.toString(),
+            receiptNumber: receipt.receiptNumber,
           },
-          { upsert: true },
-        )
-        .exec();
+          title: 'Doação confirmada',
+          type: NotificationType.DONATION_STATUS_UPDATED,
+          userId: receipt.donorUserId,
+        },
+      );
     }
 
     if (donor.settings?.notifications?.email !== false) {

@@ -124,6 +124,49 @@ export class User {
   bio?: string;
 
   @Prop({
+    type: [
+      raw({
+        token: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        platform: {
+          type: String,
+          enum: ['android', 'ios', 'web', 'unknown'],
+          required: true,
+          default: 'unknown',
+        },
+        deviceId: {
+          type: String,
+          trim: true,
+        },
+        appVersion: {
+          type: String,
+          trim: true,
+        },
+        lastSeenAt: {
+          type: Date,
+          required: true,
+          default: Date.now,
+        },
+        disabledAt: {
+          type: Date,
+        },
+      }),
+    ],
+    default: [],
+  })
+  pushTokens?: Array<{
+    token: string;
+    platform: 'android' | 'ios' | 'web' | 'unknown';
+    deviceId?: string;
+    appVersion?: string;
+    lastSeenAt: Date;
+    disabledAt?: Date;
+  }>;
+
+  @Prop({
     required: true,
     enum: UserStatus,
     type: String,

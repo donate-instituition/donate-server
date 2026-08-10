@@ -9,6 +9,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
 import { CreateUserDto, type UserRoleGrantInput } from './dto/create-user.dto';
+import { RegisterPushTokenDto } from './dto/register-push-token.dto';
+import { UnregisterPushTokenDto } from './dto/unregister-push-token.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserRole, UserStatus, UserType } from './models';
 import { User, UserDocument } from './schemas/user.schema';
@@ -352,6 +354,72 @@ export class UsersService implements OnModuleInit {
         { returnDocument: 'after' },
       )
       .exec();
+  }
+
+  async registerPushToken(id: string, registerPushTokenDto: RegisterPushTokenDto) {
+    const token = registerPushTokenDto.token?.trim();
+
+    if (!token) {
+      throw new BadRequestException('Push token is required');
+    }
+
+    const user = await this.userModel.findById(id).exec();
+
+    if (!user) {
+      return null;
+    }
+
+    const now = new Date();
+    await this.userModel
+      .updateMany(
+        { _id: { $ne: id }, 'pushTokens.token': token },
+        { $set: { 'pushTokens.$.disabledAt': now } },
+      )
+      .exec();
+
+    const pushTokens = user.pushTokens ?? [];
+    const existingToken = pushTokens.find((item) => item.token === token);
+
+    if (existingToken) {
+      existingToken.appVersion = registerPushTokenDto.appVersion;
+      existingToken.deviceId = registerPushTokenDto.deviceId;
+      existingToken.platform = registerPushTokenDto.platform ?? 'unknown';
+      existingToken.lastSeenAt = now;
+      existingToken.disabledAt = undefined;
+    } else {
+      pushTokens.push({
+        appVersion: registerPushTokenDto.appVersion,
+        deviceId: registerPushTokenDto.deviceId,
+        platform: registerPushTokenDto.platform ?? 'unknown',
+        token,
+        lastSeenAt: now,
+      });
+    }
+
+    user.pushTokens = pushTokens.slice(-12);
+    await user.save();
+
+    return { registered: true };
+  }
+
+  async unregisterPushToken(
+    id: string,
+    unregisterPushTokenDto: UnregisterPushTokenDto,
+  ) {
+    const token = unregisterPushTokenDto.token?.trim();
+
+    if (!token) {
+      throw new BadRequestException('Push token is required');
+    }
+
+    await this.userModel
+      .updateOne(
+        { _id: id, 'pushTokens.token': token },
+        { $set: { 'pushTokens.$.disabledAt': new Date() } },
+      )
+      .exec();
+
+    return { unregistered: true };
   }
 
   markTermsPendingForVersionChange() {
