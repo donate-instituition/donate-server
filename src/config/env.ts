@@ -1,6 +1,11 @@
 import 'dotenv/config';
 
-type AppEnvironment = 'local' | 'development' | 'preview' | 'production' | 'test';
+type AppEnvironment =
+  | 'local'
+  | 'development'
+  | 'preview'
+  | 'production'
+  | 'test';
 
 const getRequiredEnv = (key: string, fallback?: string): string => {
   const value = process.env[key]?.trim();
@@ -39,11 +44,7 @@ const getOptionalEnv = (key: string): string | undefined => {
 };
 
 const getAppEnvironment = (): AppEnvironment => {
-  const rawValue = (
-    process.env.APP_ENV ||
-    process.env.NODE_ENV ||
-    'local'
-  )
+  const rawValue = (process.env.APP_ENV || process.env.NODE_ENV || 'local')
     .trim()
     .toLowerCase();
 
@@ -143,6 +144,27 @@ export const env = {
   rabbitmqExchange: process.env.RABBITMQ_EXCHANGE?.trim() || 'donate.jobs',
   redisUrl: process.env.REDIS_URL?.trim() || 'redis://127.0.0.1:6379',
   redisKeyPrefix: process.env.REDIS_KEY_PREFIX?.trim() || 'donate:',
+  feedCacheTtlSeconds: getOptionalNumberEnv('FEED_CACHE_TTL_SECONDS', 30),
+  campaignCacheTtlSeconds: getOptionalNumberEnv(
+    'CAMPAIGN_CACHE_TTL_SECONDS',
+    300,
+  ),
+  campaignsListCacheTtlSeconds: getOptionalNumberEnv(
+    'CAMPAIGNS_LIST_CACHE_TTL_SECONDS',
+    60,
+  ),
+  institutionCacheTtlSeconds: getOptionalNumberEnv(
+    'INSTITUTION_CACHE_TTL_SECONDS',
+    300,
+  ),
+  countersFlushIntervalMs: getOptionalNumberEnv(
+    'COUNTERS_FLUSH_INTERVAL_MS',
+    20_000,
+  ),
+  passwordResetTtlSeconds: getOptionalNumberEnv(
+    'PASSWORD_RESET_TTL_SECONDS',
+    15 * 60,
+  ),
   stripeSecretKey: process.env.STRIPE_SECRET_KEY?.trim() || '',
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET?.trim() || '',
   stripeCurrency: process.env.STRIPE_CURRENCY?.trim().toLowerCase() || 'brl',

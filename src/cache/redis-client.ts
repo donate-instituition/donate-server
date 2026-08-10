@@ -23,16 +23,29 @@ function createRedisClient(): RedisClientType {
     },
   });
 
+  // While Redis is down, `reconnectStrategy` retries every few seconds and
+  // each failed attempt fires its own 'error' event — logging every one of
+  // those at WARN would spam the console for as long as it's down. Log the
+  // first failure, go quiet, then announce when it comes back.
+  let isDown = false;
+
   redisClient.on('error', (error) => {
-    logger.warn('Redis client error', CONTEXT, {
-      message: error instanceof Error ? error.message : String(error),
-    });
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (isDown) {
+      logger.debug('Redis still unreachable', CONTEXT, { message });
+      return;
+    }
+
+    isDown = true;
+    logger.warn('Redis client error', CONTEXT, { message });
   });
   redisClient.on('reconnecting', () => {
     logger.debug('Redis reconnecting', CONTEXT);
   });
   redisClient.on('ready', () => {
-    logger.log('Redis connected', CONTEXT);
+    logger.log(isDown ? 'Redis reconnected' : 'Redis connected', CONTEXT);
+    isDown = false;
   });
 
   return redisClient;
@@ -157,4 +170,46 @@ export async function releaseLock(
   });
 
   return released === 1;
+}
+
+/** Plain INCRBY, no TTL. Backs list-cache version counters and pending counter deltas. */
+export async function increment(key: string, delta = 1): Promise<number> {
+  const redisClient = await ensureRedisConnected();
+  return redisClient.incrBy(key, delta);
+}
+
+/** Atomic read-then-delete (GETDEL) so a key is never read and cleared in two round trips. */
+export async function getAndClear(key: string): Promise<number | null> {
+  const redisClient = await ensureRedisConnected();
+  const raw = await redisClient.getDel(key);
+
+  return raw === null ? null : Number(raw);
+}
+
+/**
+ * Lists keys matching a pattern via non-blocking SCAN. Returns keys with the
+ * client's `keyPrefix` already stripped, so callers can pass them straight
+ * into `get`/`getAndClear`/etc. without double-prefixing.
+ *
+ * Two gotchas this hides: `scanIterator`'s MATCH pattern is NOT
+ * auto-prefixed by `keyPrefix` (unlike a plain key argument), and it yields
+ * batches of keys per cursor step, not one key at a time.
+ */
+export async function scanKeys(matchPattern: string): Promise<string[]> {
+  const redisClient = await ensureRedisConnected();
+  const prefix = env.redisKeyPrefix;
+  const keys: string[] = [];
+
+  for await (const batch of redisClient.scanIterator({
+    MATCH: `${prefix}${matchPattern}`,
+    COUNT: 200,
+  })) {
+    for (const rawKey of batch) {
+      keys.push(
+        rawKey.startsWith(prefix) ? rawKey.slice(prefix.length) : rawKey,
+      );
+    }
+  }
+
+  return keys;
 }
