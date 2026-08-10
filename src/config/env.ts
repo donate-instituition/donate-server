@@ -141,6 +141,8 @@ export const env = {
   emailSupportPhone: process.env.EMAIL_SUPPORT_PHONE?.trim() || '',
   rabbitmqUrl: process.env.RABBITMQ_URL?.trim() || '',
   rabbitmqExchange: process.env.RABBITMQ_EXCHANGE?.trim() || 'donate.jobs',
+  redisUrl: process.env.REDIS_URL?.trim() || 'redis://127.0.0.1:6379',
+  redisKeyPrefix: process.env.REDIS_KEY_PREFIX?.trim() || 'donate:',
   stripeSecretKey: process.env.STRIPE_SECRET_KEY?.trim() || '',
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET?.trim() || '',
   stripeCurrency: process.env.STRIPE_CURRENCY?.trim().toLowerCase() || 'brl',
