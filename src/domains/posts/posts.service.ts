@@ -367,4 +367,23 @@ export class PostsService {
 
     return { id };
   }
+
+  async share(id: string) {
+    const post = await this.postModel
+      .findByIdAndUpdate(
+        this.toObjectId(id),
+        { $inc: { 'stats.sharesCount': 1 } },
+        { returnDocument: 'after' },
+      )
+      .exec();
+
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    return {
+      postId: id,
+      sharesCount: post.stats?.sharesCount ?? 0,
+    };
+  }
 }

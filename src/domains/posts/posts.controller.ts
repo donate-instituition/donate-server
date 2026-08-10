@@ -41,6 +41,11 @@ export class PostsController {
     return this.postsService.feed(user?.sub, query);
   }
 
+  @Post(':id/share')
+  share(@Param('id') id: string) {
+    return this.postsService.share(id);
+  }
+
   @Get(':id')
   findOne(
     @Param('id') id: string,
