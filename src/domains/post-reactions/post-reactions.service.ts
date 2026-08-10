@@ -6,6 +6,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
+import { CountersService } from '../../cache';
 import { Post as PostEntity, PostDocument } from '../posts/schemas/post.schema';
 import { CreatePostReactionDto } from './dto/create-post-reaction.dto';
 import { UpdatePostReactionDto } from './dto/update-post-reaction.dto';
@@ -22,6 +23,7 @@ export class PostReactionsService {
     private readonly postReactionModel: Model<PostReactionDocument>,
     @InjectModel(PostEntity.name)
     private readonly postModel: Model<PostDocument>,
+    private readonly countersService: CountersService,
   ) {}
 
   private toObjectId(value?: string | Types.ObjectId) {
@@ -72,9 +74,17 @@ export class PostReactionsService {
     });
 
     if (type === PostReactionType.LIKE) {
-      await this.postModel
-        .updateOne({ _id: postId }, { $inc: { 'stats.likesCount': 1 } })
-        .exec();
+      await this.countersService.bufferIncrement(
+        'post',
+        postId.toString(),
+        'likesCount',
+        1,
+        async () => {
+          await this.postModel
+            .updateOne({ _id: postId }, { $inc: { 'stats.likesCount': 1 } })
+            .exec();
+        },
+      );
     }
 
     return this.toReactionResponse(reaction);
@@ -106,12 +116,20 @@ export class PostReactionsService {
     const reaction = await this.postReactionModel.findByIdAndDelete(id).exec();
 
     if (reaction?.type === PostReactionType.LIKE) {
-      await this.postModel
-        .updateOne(
-          { _id: reaction.postId },
-          { $inc: { 'stats.likesCount': -1 } },
-        )
-        .exec();
+      await this.countersService.bufferIncrement(
+        'post',
+        reaction.postId.toString(),
+        'likesCount',
+        -1,
+        async () => {
+          await this.postModel
+            .updateOne(
+              { _id: reaction.postId },
+              { $inc: { 'stats.likesCount': -1 } },
+            )
+            .exec();
+        },
+      );
     }
 
     return { id };
@@ -125,9 +143,20 @@ export class PostReactionsService {
       .exec();
 
     if (reaction?.type === PostReactionType.LIKE) {
-      await this.postModel
-        .updateOne({ _id: parsedPostId }, { $inc: { 'stats.likesCount': -1 } })
-        .exec();
+      await this.countersService.bufferIncrement(
+        'post',
+        parsedPostId.toString(),
+        'likesCount',
+        -1,
+        async () => {
+          await this.postModel
+            .updateOne(
+              { _id: parsedPostId },
+              { $inc: { 'stats.likesCount': -1 } },
+            )
+            .exec();
+        },
+      );
     }
 
     return { postId };

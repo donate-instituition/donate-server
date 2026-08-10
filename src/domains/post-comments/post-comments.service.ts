@@ -7,6 +7,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
+import { CountersService } from '../../cache';
 import { Post as PostEntity, PostDocument } from '../posts/schemas/post.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreatePostCommentDto } from './dto/create-post-comment.dto';
@@ -25,6 +26,7 @@ export class PostCommentsService {
     private readonly postModel: Model<PostDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    private readonly countersService: CountersService,
   ) {}
 
   private toObjectId(value?: string | Types.ObjectId) {
@@ -90,9 +92,17 @@ export class PostCommentsService {
       content,
     });
 
-    await this.postModel
-      .updateOne({ _id: postId }, { $inc: { 'stats.commentsCount': 1 } })
-      .exec();
+    await this.countersService.bufferIncrement(
+      'post',
+      postId.toString(),
+      'commentsCount',
+      1,
+      async () => {
+        await this.postModel
+          .updateOne({ _id: postId }, { $inc: { 'stats.commentsCount': 1 } })
+          .exec();
+      },
+    );
 
     const author = await this.userModel.findById(authorUserId).lean().exec();
     return this.toCommentResponse(comment, author);
