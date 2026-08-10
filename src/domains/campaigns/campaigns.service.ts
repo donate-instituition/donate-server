@@ -8,12 +8,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { randomUUID } from 'crypto';
 
+import { campaignCacheKey, CountersService, RedisService } from '../../cache';
 import {
   getPaginationOptions,
   paginatedResponse,
   type PaginationQuery,
   shouldPaginate,
 } from '../../common/pagination';
+import { env } from '../../config/env';
 import { ObjectStorageService } from '../../storage/object-storage.service';
 import {
   InstitutionStaffMembershipRole,
@@ -72,7 +74,78 @@ export class CampaignsService {
     @InjectModel(InstitutionStaffMembership.name)
     private readonly institutionStaffMembershipModel: Model<InstitutionStaffMembershipDocument>,
     private readonly objectStorageService: ObjectStorageService,
+    private readonly redisService: RedisService,
+    private readonly countersService: CountersService,
   ) {}
+
+  /**
+   * Bumps the list-cache version so every previously-cached `findAll`/
+   * `findMine` page becomes unreachable (they just age out via their own
+   * TTL), plus deletes the single-entity cache when an id is known. Called
+   * on real content mutations only — likes/comments/shares go through
+   * `CountersService` instead and are intentionally NOT invalidated here,
+   * since busting the cache on every engagement event would defeat the
+   * point of buffering those counters.
+   */
+  private async invalidateCampaignCache(id?: string) {
+    const tasks: Promise<unknown>[] = [
+      this.redisService.increment('cache:version:campaigns'),
+    ];
+
+    if (id) {
+      tasks.push(this.redisService.del(campaignCacheKey(id)));
+    }
+
+    await Promise.all(tasks).catch(() => undefined);
+  }
+
+  private async buildListCacheKey(query: PaginationQuery, extra = '') {
+    const version =
+      (await this.redisService
+        .get<number>('cache:version:campaigns')
+        .catch(() => null)) ?? 0;
+
+    return `cache:campaigns:list:v${version}:${extra}${JSON.stringify(query)}`;
+  }
+
+  private applyPendingDeltas(
+    item: any,
+    delta: { likesCount: number; commentsCount: number; sharesCount: number },
+  ) {
+    return {
+      ...item,
+      likesCount: (item.likesCount ?? 0) + delta.likesCount,
+      commentsCount: (item.commentsCount ?? 0) + delta.commentsCount,
+      sharesCount: (item.sharesCount ?? 0) + delta.sharesCount,
+    };
+  }
+
+  private async withCampaignDeltas(response: any) {
+    const items = Array.isArray(response) ? response : response.items;
+
+    if (!items?.length) {
+      return response;
+    }
+
+    const deltas = await this.countersService.getPendingDeltas(
+      'campaign',
+      items.map((item: any) => item.id),
+    );
+    const mergedItems = items.map((item: any) =>
+      this.applyPendingDeltas(
+        item,
+        deltas.get(item.id) ?? {
+          likesCount: 0,
+          commentsCount: 0,
+          sharesCount: 0,
+        },
+      ),
+    );
+
+    return Array.isArray(response)
+      ? mergedItems
+      : { ...response, items: mergedItems };
+  }
 
   private formatCurrency(value: number) {
     return `R$ ${(value / 100).toFixed(2).replace('.', ',')}`;
@@ -135,6 +208,11 @@ export class CampaignsService {
   private toAppCampaign(
     campaign: CampaignDocument | any,
     institution?: InstitutionDocument | any,
+    pendingDeltas?: {
+      likesCount: number;
+      commentsCount: number;
+      sharesCount: number;
+    },
   ) {
     const goalCents = Number(campaign?.goal?.moneyTarget ?? 0) * 100;
     const raisedCents = Number(campaign?.progress?.moneyRaised ?? 0) * 100;
@@ -166,9 +244,13 @@ export class CampaignsService {
       progress,
       donationsCount: campaign.stats?.donationsCount ?? 0,
       followersCount: campaign.stats?.followersCount ?? 0,
-      likesCount: campaign.stats?.likesCount ?? 0,
-      commentsCount: campaign.stats?.commentsCount ?? 0,
-      sharesCount: campaign.stats?.sharesCount ?? 0,
+      likesCount:
+        (campaign.stats?.likesCount ?? 0) + (pendingDeltas?.likesCount ?? 0),
+      commentsCount:
+        (campaign.stats?.commentsCount ?? 0) +
+        (pendingDeltas?.commentsCount ?? 0),
+      sharesCount:
+        (campaign.stats?.sharesCount ?? 0) + (pendingDeltas?.sharesCount ?? 0),
       postsCount: campaign.stats?.postsCount ?? 0,
       active,
       endsAt: campaign.endAt
@@ -274,7 +356,9 @@ export class CampaignsService {
 
   async create(createCampaignDto: CreateCampaignDto) {
     await this.ensureSeedData();
-    return this.campaignModel.create(createCampaignDto);
+    const campaign = await this.campaignModel.create(createCampaignDto);
+    await this.invalidateCampaignCache();
+    return campaign;
   }
 
   private async findActiveMembership(userId?: string) {
@@ -352,6 +436,7 @@ export class CampaignsService {
       visibility: createCampaignDto.visibility ?? CampaignVisibility.PUBLIC,
     });
 
+    await this.invalidateCampaignCache();
     return this.findOne(campaign._id.toString());
   }
 
@@ -401,6 +486,7 @@ export class CampaignsService {
       )
       .exec();
 
+    await this.invalidateCampaignCache(id);
     return this.findOne(updatedCampaign?._id.toString() ?? id);
   }
 
@@ -457,6 +543,17 @@ export class CampaignsService {
 
   async findAll(query: PaginationQuery = {}) {
     await this.ensureSeedData();
+    const cacheKey = await this.buildListCacheKey(query);
+    const base = await this.redisService.cacheAside(
+      cacheKey,
+      env.campaignsListCacheTtlSeconds,
+      () => this.loadFindAll(query),
+    );
+
+    return this.withCampaignDeltas(base);
+  }
+
+  private async loadFindAll(query: PaginationQuery) {
     const pagination = getPaginationOptions(query);
     const shouldReturnPaginated = shouldPaginate(query);
     const filter: Record<string, unknown> = {
@@ -509,6 +606,23 @@ export class CampaignsService {
   async findMine(userId?: string, query: PaginationQuery = {}) {
     await this.ensureSeedData();
     const membership = await this.findActiveMembership(userId);
+    const cacheKey = await this.buildListCacheKey(
+      query,
+      `mine:${membership.institutionId.toString()}:`,
+    );
+    const base = await this.redisService.cacheAside(
+      cacheKey,
+      env.campaignsListCacheTtlSeconds,
+      () => this.loadFindMine(membership, query),
+    );
+
+    return this.withCampaignDeltas(base);
+  }
+
+  private async loadFindMine(
+    membership: { institutionId: Types.ObjectId },
+    query: PaginationQuery,
+  ) {
     const pagination = getPaginationOptions(query);
     const shouldReturnPaginated = shouldPaginate(query);
     const filter: Record<string, unknown> = {
@@ -548,6 +662,17 @@ export class CampaignsService {
 
   async findOne(id: string) {
     await this.ensureSeedData();
+    const base = await this.redisService.cacheAside(
+      campaignCacheKey(id),
+      env.campaignCacheTtlSeconds,
+      () => this.loadFindOne(id),
+    );
+    const delta = await this.countersService.getPendingDelta('campaign', id);
+
+    return this.applyPendingDeltas(base, delta);
+  }
+
+  private async loadFindOne(id: string) {
     const campaign = await this.campaignModel.findById(id).lean().exec();
 
     if (!campaign) {
@@ -568,14 +693,18 @@ export class CampaignsService {
     };
   }
 
-  update(id: string, updateCampaignDto: UpdateCampaignDto) {
-    return this.campaignModel
+  async update(id: string, updateCampaignDto: UpdateCampaignDto) {
+    const campaign = await this.campaignModel
       .findByIdAndUpdate(id, updateCampaignDto, { returnDocument: 'after' })
       .exec();
+    await this.invalidateCampaignCache(id);
+    return campaign;
   }
 
-  remove(id: string) {
-    return this.campaignModel.findByIdAndDelete(id).exec();
+  async remove(id: string) {
+    const campaign = await this.campaignModel.findByIdAndDelete(id).exec();
+    await this.invalidateCampaignCache(id);
+    return campaign;
   }
 
   private toCampaignCommentResponse(
@@ -603,7 +732,9 @@ export class CampaignsService {
 
   async listComments(id: string) {
     const campaignId = this.toObjectId(id);
-    const campaign = await this.campaignModel.exists({ _id: campaignId }).exec();
+    const campaign = await this.campaignModel
+      .exists({ _id: campaignId })
+      .exec();
 
     if (!campaign) {
       throw new NotFoundException(`Campanha ${id} não encontrada.`);
@@ -620,7 +751,11 @@ export class CampaignsService {
     );
   }
 
-  async createComment(id: string, content: string | undefined, userId?: string) {
+  async createComment(
+    id: string,
+    content: string | undefined,
+    userId?: string,
+  ) {
     const campaignId = this.toObjectId(id);
     const authorUserId = this.toObjectId(userId);
     const normalizedContent = content?.trim();
@@ -629,7 +764,9 @@ export class CampaignsService {
       throw new BadRequestException('Comentário é obrigatório.');
     }
 
-    const campaign = await this.campaignModel.exists({ _id: campaignId }).exec();
+    const campaign = await this.campaignModel
+      .exists({ _id: campaignId })
+      .exec();
 
     if (!campaign) {
       throw new NotFoundException(`Campanha ${id} não encontrada.`);
@@ -641,9 +778,20 @@ export class CampaignsService {
       content: normalizedContent,
     });
 
-    await this.campaignModel
-      .updateOne({ _id: campaignId }, { $inc: { 'stats.commentsCount': 1 } })
-      .exec();
+    await this.countersService.bufferIncrement(
+      'campaign',
+      id,
+      'commentsCount',
+      1,
+      async () => {
+        await this.campaignModel
+          .updateOne(
+            { _id: campaignId },
+            { $inc: { 'stats.commentsCount': 1 } },
+          )
+          .exec();
+      },
+    );
 
     const author = await this.userModel.findById(authorUserId).lean().exec();
     return this.toCampaignCommentResponse(comment, author);
@@ -652,7 +800,9 @@ export class CampaignsService {
   async like(id: string, userId?: string) {
     const campaignId = this.toObjectId(id);
     const ownerId = this.toObjectId(userId);
-    const campaign = await this.campaignModel.exists({ _id: campaignId }).exec();
+    const campaign = await this.campaignModel
+      .exists({ _id: campaignId })
+      .exec();
 
     if (!campaign) {
       throw new NotFoundException(`Campanha ${id} não encontrada.`);
@@ -671,9 +821,17 @@ export class CampaignsService {
       userId: ownerId,
       type: 'LIKE',
     });
-    await this.campaignModel
-      .updateOne({ _id: campaignId }, { $inc: { 'stats.likesCount': 1 } })
-      .exec();
+    await this.countersService.bufferIncrement(
+      'campaign',
+      id,
+      'likesCount',
+      1,
+      async () => {
+        await this.campaignModel
+          .updateOne({ _id: campaignId }, { $inc: { 'stats.likesCount': 1 } })
+          .exec();
+      },
+    );
 
     return { campaignId: id, liked: true };
   }
@@ -686,9 +844,20 @@ export class CampaignsService {
       .exec();
 
     if (reaction) {
-      await this.campaignModel
-        .updateOne({ _id: campaignId }, { $inc: { 'stats.likesCount': -1 } })
-        .exec();
+      await this.countersService.bufferIncrement(
+        'campaign',
+        id,
+        'likesCount',
+        -1,
+        async () => {
+          await this.campaignModel
+            .updateOne(
+              { _id: campaignId },
+              { $inc: { 'stats.likesCount': -1 } },
+            )
+            .exec();
+        },
+      );
     }
 
     return { campaignId: id, liked: false };
@@ -696,19 +865,34 @@ export class CampaignsService {
 
   async share(id: string) {
     const campaignId = this.toObjectId(id);
-    const campaign = await this.campaignModel
-      .findByIdAndUpdate(
-        campaignId,
-        { $inc: { 'stats.sharesCount': 1 } },
-        { returnDocument: 'after' },
-      )
-      .lean()
-      .exec();
+    const exists = await this.campaignModel.exists({ _id: campaignId }).exec();
 
-    if (!campaign) {
+    if (!exists) {
       throw new NotFoundException(`Campanha ${id} não encontrada.`);
     }
 
-    return { campaignId: id, sharesCount: campaign.stats?.sharesCount ?? 0 };
+    await this.countersService.bufferIncrement(
+      'campaign',
+      id,
+      'sharesCount',
+      1,
+      async () => {
+        await this.campaignModel
+          .updateOne({ _id: campaignId }, { $inc: { 'stats.sharesCount': 1 } })
+          .exec();
+      },
+    );
+
+    const campaign = await this.campaignModel
+      .findById(campaignId)
+      .select('stats.sharesCount')
+      .lean()
+      .exec();
+    const delta = await this.countersService.getPendingDelta('campaign', id);
+
+    return {
+      campaignId: id,
+      sharesCount: (campaign?.stats?.sharesCount ?? 0) + delta.sharesCount,
+    };
   }
 }
