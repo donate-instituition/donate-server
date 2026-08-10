@@ -9,11 +9,18 @@ import { Model, Types } from 'mongoose';
 
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
 import {
+  campaignCacheKey,
+  CountersService,
+  institutionCacheKey,
+  RedisService,
+} from '../../cache';
+import {
   getPaginationOptions,
   paginatedResponse,
   type PaginationQuery,
   shouldPaginate,
 } from '../../common/pagination';
+import { env } from '../../config/env';
 import {
   Campaign,
   CampaignDocument,
@@ -47,6 +54,8 @@ export class PostsService {
     private readonly institutionModel: Model<InstitutionDocument>,
     @InjectModel(InstitutionStaffMembership.name)
     private readonly staffMembershipModel: Model<InstitutionStaffMembershipDocument>,
+    private readonly redisService: RedisService,
+    private readonly countersService: CountersService,
   ) {}
 
   private toObjectId(value?: string | Types.ObjectId) {
@@ -67,6 +76,9 @@ export class PostsService {
     return currentUser;
   }
 
+  // `stats` here is the Mongo baseline only — likes/comments/shares are
+  // buffered in Redis before being consolidated, so every caller must merge
+  // the pending delta via `withPostDelta`/`withPostDeltas` before returning.
   private toPostResponse(post: PostDocument | PostEntity) {
     return {
       id: post._id?.toString(),
@@ -81,6 +93,58 @@ export class PostsService {
       createdAt: post.createdAt?.toISOString?.() ?? post.createdAt,
       updatedAt: post.updatedAt?.toISOString?.() ?? post.updatedAt,
     };
+  }
+
+  private async withPostDelta<T extends { id?: string; stats?: any }>(
+    item: T,
+  ): Promise<T> {
+    if (!item.id) {
+      return item;
+    }
+
+    const delta = await this.countersService.getPendingDelta('post', item.id);
+
+    return {
+      ...item,
+      stats: {
+        likesCount: (item.stats?.likesCount ?? 0) + delta.likesCount,
+        commentsCount: (item.stats?.commentsCount ?? 0) + delta.commentsCount,
+        sharesCount: (item.stats?.sharesCount ?? 0) + delta.sharesCount,
+      },
+    };
+  }
+
+  private async withPostDeltas(response: any) {
+    const items = Array.isArray(response) ? response : response.items;
+
+    if (!items?.length) {
+      return response;
+    }
+
+    const deltas = await this.countersService.getPendingDeltas(
+      'post',
+      items.map((item: any) => item.id),
+    );
+    const mergedItems = items.map((item: any) => {
+      const delta = deltas.get(item.id) ?? {
+        likesCount: 0,
+        commentsCount: 0,
+        sharesCount: 0,
+      };
+
+      return {
+        ...item,
+        stats: {
+          likesCount: (item.stats?.likesCount ?? 0) + delta.likesCount,
+          commentsCount: (item.stats?.commentsCount ?? 0) + delta.commentsCount,
+          sharesCount: (item.stats?.sharesCount ?? 0) + delta.sharesCount,
+        },
+      };
+    });
+
+    return Array.isArray(response)
+      ? mergedItems
+      : { ...response, items: mergedItems };
   }
 
   private async assertCanPostAsInstitution(
@@ -140,24 +204,39 @@ export class PostsService {
     const updates: Array<Promise<unknown>> = [];
 
     if (post.institutionId) {
+      const institutionId = post.institutionId.toString();
       updates.push(
         this.institutionModel
           .updateOne(
             { _id: post.institutionId },
             { $inc: { 'stats.postsCount': delta } },
           )
-          .exec(),
+          .exec()
+          .then(() =>
+            // Cache invalidation failing shouldn't fail the post mutation
+            // itself — worst case the cached postsCount is stale until TTL.
+            this.redisService
+              .del(institutionCacheKey(institutionId))
+              .catch(() => undefined),
+          ),
       );
     }
 
     if (post.campaignId) {
+      const campaignId = post.campaignId.toString();
       updates.push(
         this.campaignModel
           .updateOne(
             { _id: post.campaignId },
             { $inc: { 'stats.postsCount': delta } },
           )
-          .exec(),
+          .exec()
+          .then(() =>
+            Promise.all([
+              this.redisService.del(campaignCacheKey(campaignId)),
+              this.redisService.increment('cache:version:campaigns'),
+            ]).catch(() => undefined),
+          ),
       );
     }
 
@@ -226,14 +305,25 @@ export class PostsService {
     const items = posts.map((post) => this.toPostResponse(post));
 
     if (!shouldReturnPaginated) {
-      return items;
+      return this.withPostDeltas(items);
     }
 
     const total = await this.postModel.countDocuments(filter).exec();
-    return paginatedResponse(items, total, pagination);
+    return this.withPostDeltas(paginatedResponse(items, total, pagination));
   }
 
   async feed(followerUserId?: string, query: PaginationQuery = {}) {
+    const cacheKey = `feed:${followerUserId ?? 'anon'}:${JSON.stringify(query)}`;
+    const base = await this.redisService.cacheAside(
+      cacheKey,
+      env.feedCacheTtlSeconds,
+      () => this.loadFeed(followerUserId, query),
+    );
+
+    return this.withPostDeltas(base);
+  }
+
+  private async loadFeed(followerUserId?: string, query: PaginationQuery = {}) {
     const pagination = getPaginationOptions({
       limit: query.limit ?? '50',
       page: query.page,
@@ -272,14 +362,14 @@ export class PostsService {
     ];
 
     const filter = {
-        $or: [
-          { visibility: PostVisibility.PUBLIC },
-          {
-            visibility: PostVisibility.FOLLOWERS_ONLY,
-            $or: followerOnlyConditions,
-          },
-        ],
-      };
+      $or: [
+        { visibility: PostVisibility.PUBLIC },
+        {
+          visibility: PostVisibility.FOLLOWERS_ONLY,
+          $or: followerOnlyConditions,
+        },
+      ],
+    };
     const posts = await this.postModel
       .find(filter)
       .sort({ createdAt: pagination.sort === 'oldest' ? 1 : -1 })
@@ -303,7 +393,7 @@ export class PostsService {
     if (!post) return null;
 
     if (post.visibility === PostVisibility.PUBLIC) {
-      return this.toPostResponse(post);
+      return this.withPostDelta(this.toPostResponse(post));
     }
 
     const userId = this.toObjectId(followerUserId);
@@ -343,7 +433,7 @@ export class PostsService {
       throw new ForbiddenException('You cannot view this post');
     }
 
-    return this.toPostResponse(post);
+    return this.withPostDelta(this.toPostResponse(post));
   }
 
   async update(id: string, updatePostDto: UpdatePostDto) {
@@ -355,7 +445,7 @@ export class PostsService {
       .findByIdAndUpdate(id, update, { returnDocument: 'after' })
       .exec();
 
-    return post ? this.toPostResponse(post) : null;
+    return post ? this.withPostDelta(this.toPostResponse(post)) : null;
   }
 
   async remove(id: string) {
@@ -369,21 +459,35 @@ export class PostsService {
   }
 
   async share(id: string) {
-    const post = await this.postModel
-      .findByIdAndUpdate(
-        this.toObjectId(id),
-        { $inc: { 'stats.sharesCount': 1 } },
-        { returnDocument: 'after' },
-      )
-      .exec();
+    const postId = this.toObjectId(id);
+    const exists = await this.postModel.exists({ _id: postId }).exec();
 
-    if (!post) {
+    if (!exists) {
       throw new NotFoundException('Post not found');
     }
 
+    await this.countersService.bufferIncrement(
+      'post',
+      id,
+      'sharesCount',
+      1,
+      async () => {
+        await this.postModel
+          .updateOne({ _id: postId }, { $inc: { 'stats.sharesCount': 1 } })
+          .exec();
+      },
+    );
+
+    const post = await this.postModel
+      .findById(postId)
+      .select('stats.sharesCount')
+      .lean()
+      .exec();
+    const delta = await this.countersService.getPendingDelta('post', id);
+
     return {
       postId: id,
-      sharesCount: post.stats?.sharesCount ?? 0,
+      sharesCount: (post?.stats?.sharesCount ?? 0) + delta.sharesCount,
     };
   }
 }
