@@ -65,6 +65,41 @@ export class CampaignsController {
     return this.campaignsService.publishForCurrentInstitution(id, user?.sub);
   }
 
+  @Post(':id/comments')
+  createComment(
+    @Param('id') id: string,
+    @Body() body: { content?: string },
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.campaignsService.createComment(id, body.content, user?.sub);
+  }
+
+  @Get(':id/comments')
+  listComments(@Param('id') id: string) {
+    return this.campaignsService.listComments(id);
+  }
+
+  @Post(':id/like')
+  like(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.campaignsService.like(id, user?.sub);
+  }
+
+  @Delete(':id/like')
+  unlike(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.campaignsService.unlike(id, user?.sub);
+  }
+
+  @Post(':id/share')
+  share(@Param('id') id: string) {
+    return this.campaignsService.share(id);
+  }
+
   @Public()
   @Get()
   findAll(@Query() query: PaginationQuery) {

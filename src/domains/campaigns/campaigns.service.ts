@@ -31,11 +31,20 @@ import {
   Institution,
   InstitutionDocument,
 } from '../institutions/schemas/institution.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import {
   CampaignStatus,
   CampaignDonationType,
   CampaignVisibility,
 } from './models';
+import {
+  CampaignComment,
+  CampaignCommentDocument,
+} from './schemas/campaign-comment.schema';
+import {
+  CampaignReaction,
+  CampaignReactionDocument,
+} from './schemas/campaign-reaction.schema';
 import { Campaign, CampaignDocument } from './schemas/campaign.schema';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
@@ -52,8 +61,14 @@ export class CampaignsService {
   constructor(
     @InjectModel(Campaign.name)
     private readonly campaignModel: Model<CampaignDocument>,
+    @InjectModel(CampaignComment.name)
+    private readonly campaignCommentModel: Model<CampaignCommentDocument>,
+    @InjectModel(CampaignReaction.name)
+    private readonly campaignReactionModel: Model<CampaignReactionDocument>,
     @InjectModel(Institution.name)
     private readonly institutionModel: Model<InstitutionDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
     @InjectModel(InstitutionStaffMembership.name)
     private readonly institutionStaffMembershipModel: Model<InstitutionStaffMembershipDocument>,
     private readonly objectStorageService: ObjectStorageService,
@@ -61,6 +76,16 @@ export class CampaignsService {
 
   private formatCurrency(value: number) {
     return `R$ ${(value / 100).toFixed(2).replace('.', ',')}`;
+  }
+
+  private toObjectId(value?: string | Types.ObjectId) {
+    const id = value?.toString();
+
+    if (!id || !Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('ID inválido.');
+    }
+
+    return new Types.ObjectId(id);
   }
 
   private toAppCategory(category?: string) {
@@ -141,6 +166,9 @@ export class CampaignsService {
       progress,
       donationsCount: campaign.stats?.donationsCount ?? 0,
       followersCount: campaign.stats?.followersCount ?? 0,
+      likesCount: campaign.stats?.likesCount ?? 0,
+      commentsCount: campaign.stats?.commentsCount ?? 0,
+      sharesCount: campaign.stats?.sharesCount ?? 0,
       postsCount: campaign.stats?.postsCount ?? 0,
       active,
       endsAt: campaign.endAt
@@ -548,5 +576,139 @@ export class CampaignsService {
 
   remove(id: string) {
     return this.campaignModel.findByIdAndDelete(id).exec();
+  }
+
+  private toCampaignCommentResponse(
+    comment: CampaignCommentDocument | CampaignComment,
+    author?: UserDocument | User | any,
+  ) {
+    return {
+      id: comment._id?.toString(),
+      campaignId: comment.campaignId?.toString(),
+      userId:
+        (comment.userId as any)?._id?.toString?.() ??
+        comment.userId?.toString(),
+      author: author
+        ? {
+            id: author._id?.toString() ?? author.id,
+            fullName: author.fullName,
+            email: author.email,
+          }
+        : undefined,
+      content: comment.content,
+      createdAt: comment.createdAt?.toISOString?.() ?? comment.createdAt,
+      updatedAt: comment.updatedAt?.toISOString?.() ?? comment.updatedAt,
+    };
+  }
+
+  async listComments(id: string) {
+    const campaignId = this.toObjectId(id);
+    const campaign = await this.campaignModel.exists({ _id: campaignId }).exec();
+
+    if (!campaign) {
+      throw new NotFoundException(`Campanha ${id} não encontrada.`);
+    }
+
+    const comments = await this.campaignCommentModel
+      .find({ campaignId })
+      .sort({ createdAt: 1 })
+      .populate('userId', 'fullName email')
+      .exec();
+
+    return comments.map((comment: any) =>
+      this.toCampaignCommentResponse(comment, comment.userId),
+    );
+  }
+
+  async createComment(id: string, content: string | undefined, userId?: string) {
+    const campaignId = this.toObjectId(id);
+    const authorUserId = this.toObjectId(userId);
+    const normalizedContent = content?.trim();
+
+    if (!normalizedContent) {
+      throw new BadRequestException('Comentário é obrigatório.');
+    }
+
+    const campaign = await this.campaignModel.exists({ _id: campaignId }).exec();
+
+    if (!campaign) {
+      throw new NotFoundException(`Campanha ${id} não encontrada.`);
+    }
+
+    const comment = await this.campaignCommentModel.create({
+      campaignId,
+      userId: authorUserId,
+      content: normalizedContent,
+    });
+
+    await this.campaignModel
+      .updateOne({ _id: campaignId }, { $inc: { 'stats.commentsCount': 1 } })
+      .exec();
+
+    const author = await this.userModel.findById(authorUserId).lean().exec();
+    return this.toCampaignCommentResponse(comment, author);
+  }
+
+  async like(id: string, userId?: string) {
+    const campaignId = this.toObjectId(id);
+    const ownerId = this.toObjectId(userId);
+    const campaign = await this.campaignModel.exists({ _id: campaignId }).exec();
+
+    if (!campaign) {
+      throw new NotFoundException(`Campanha ${id} não encontrada.`);
+    }
+
+    const existing = await this.campaignReactionModel
+      .findOne({ campaignId, userId: ownerId })
+      .exec();
+
+    if (existing) {
+      return { campaignId: id, liked: true };
+    }
+
+    await this.campaignReactionModel.create({
+      campaignId,
+      userId: ownerId,
+      type: 'LIKE',
+    });
+    await this.campaignModel
+      .updateOne({ _id: campaignId }, { $inc: { 'stats.likesCount': 1 } })
+      .exec();
+
+    return { campaignId: id, liked: true };
+  }
+
+  async unlike(id: string, userId?: string) {
+    const campaignId = this.toObjectId(id);
+    const ownerId = this.toObjectId(userId);
+    const reaction = await this.campaignReactionModel
+      .findOneAndDelete({ campaignId, userId: ownerId })
+      .exec();
+
+    if (reaction) {
+      await this.campaignModel
+        .updateOne({ _id: campaignId }, { $inc: { 'stats.likesCount': -1 } })
+        .exec();
+    }
+
+    return { campaignId: id, liked: false };
+  }
+
+  async share(id: string) {
+    const campaignId = this.toObjectId(id);
+    const campaign = await this.campaignModel
+      .findByIdAndUpdate(
+        campaignId,
+        { $inc: { 'stats.sharesCount': 1 } },
+        { returnDocument: 'after' },
+      )
+      .lean()
+      .exec();
+
+    if (!campaign) {
+      throw new NotFoundException(`Campanha ${id} não encontrada.`);
+    }
+
+    return { campaignId: id, sharesCount: campaign.stats?.sharesCount ?? 0 };
   }
 }
