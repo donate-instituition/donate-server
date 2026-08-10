@@ -6,7 +6,6 @@ import {
   PaymentsController,
   StripeWebhookController,
 } from './payments.controller';
-import { StripeWebhookProcessorService } from './stripe-webhook-processor.service';
 import { PaymentsService } from './payments.service';
 import {
   StripeWebhookEvent,
@@ -34,6 +33,6 @@ import { AppSettingsModule } from '../app-settings/app-settings.module';
     ]),
   ],
   controllers: [PaymentsController, StripeWebhookController],
-  providers: [PaymentsService, StripeWebhookProcessorService],
+  providers: [PaymentsService],
 })
 export class PaymentsModule {}
