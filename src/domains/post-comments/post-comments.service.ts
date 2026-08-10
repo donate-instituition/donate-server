@@ -8,6 +8,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
 import { Post as PostEntity, PostDocument } from '../posts/schemas/post.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreatePostCommentDto } from './dto/create-post-comment.dto';
 import { UpdatePostCommentDto } from './dto/update-post-comment.dto';
 import {
@@ -22,6 +23,8 @@ export class PostCommentsService {
     private readonly postCommentModel: Model<PostCommentDocument>,
     @InjectModel(PostEntity.name)
     private readonly postModel: Model<PostDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
   ) {}
 
   private toObjectId(value?: string | Types.ObjectId) {
@@ -34,11 +37,23 @@ export class PostCommentsService {
     return new Types.ObjectId(id);
   }
 
-  private toCommentResponse(comment: PostCommentDocument | PostComment) {
+  private toCommentResponse(
+    comment: PostCommentDocument | PostComment,
+    author?: UserDocument | User | any,
+  ) {
     return {
       id: comment._id?.toString(),
       postId: comment.postId?.toString(),
-      userId: comment.userId?.toString(),
+      userId:
+        (comment.userId as any)?._id?.toString?.() ??
+        comment.userId?.toString(),
+      author: author
+        ? {
+            id: author._id?.toString() ?? author.id,
+            fullName: author.fullName,
+            email: author.email,
+          }
+        : undefined,
       parentCommentId: comment.parentCommentId?.toString(),
       content: comment.content,
       createdAt: comment.createdAt?.toISOString?.() ?? comment.createdAt,
@@ -79,7 +94,8 @@ export class PostCommentsService {
       .updateOne({ _id: postId }, { $inc: { 'stats.commentsCount': 1 } })
       .exec();
 
-    return this.toCommentResponse(comment);
+    const author = await this.userModel.findById(authorUserId).lean().exec();
+    return this.toCommentResponse(comment, author);
   }
 
   async findAll() {
@@ -95,9 +111,12 @@ export class PostCommentsService {
     const comments = await this.postCommentModel
       .find({ postId: this.toObjectId(postId) })
       .sort({ createdAt: 1 })
+      .populate('userId', 'fullName email')
       .exec();
 
-    return comments.map((comment) => this.toCommentResponse(comment));
+    return comments.map((comment: any) =>
+      this.toCommentResponse(comment, comment.userId),
+    );
   }
 
   async findOne(id: string) {
