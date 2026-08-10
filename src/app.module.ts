@@ -4,6 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { RedisModule } from './cache';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { IdempotencyMiddleware } from './common/idempotency/middleware/idempotency.middleware';
 import {
@@ -46,6 +47,7 @@ import { StorageModule } from './storage/storage.module';
       { name: IdempotencyRecord.name, schema: IdempotencyRecordSchema },
     ]),
     StorageModule,
+    RedisModule,
     AppSettingsModule,
     AuthModule,
     UsersModule,
