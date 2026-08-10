@@ -8,12 +8,10 @@ import {
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { QueueModule } from '../../queues/queue.module';
-import { PushNotificationsModule } from '../../notifications/push/push-notifications.module';
 
 @Module({
   imports: [
     QueueModule,
-    PushNotificationsModule,
     MongooseModule.forFeature([
       { name: Notification.name, schema: NotificationSchema },
     ]),
