@@ -19,6 +19,8 @@ import {
 } from '../institutions/schemas/institution.schema';
 import { MessageType } from '../messages/models';
 import { Message, MessageDocument } from '../messages/schemas/message.schema';
+import { NotificationType } from '../notifications/models';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UserRole } from '../users/models';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { ConversationType } from './models';
@@ -52,6 +54,7 @@ export class ConversationsService {
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     private readonly conversationsGateway: ConversationsGateway,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private requireCurrentUser(currentUser?: AuthenticatedUser) {
@@ -129,6 +132,74 @@ export class ConversationsService {
     return institution?.displayName ?? institution?.legalName;
   }
 
+  private async isInstitutionStaffParticipant(
+    institutionId: Types.ObjectId | undefined,
+    userId: Types.ObjectId,
+  ) {
+    if (!institutionId) {
+      return false;
+    }
+
+    const membership = await this.staffMembershipModel
+      .exists({
+        institutionId,
+        status: InstitutionStaffMembershipStatus.ACTIVE,
+        userId,
+      })
+      .exec();
+
+    return Boolean(membership);
+  }
+
+  private async getCounterpartName(
+    conversation: ConversationRecord,
+    currentUserId: Types.ObjectId,
+    institutionName: string,
+  ) {
+    if (conversation.subjectKey === SUPPORT_SUBJECT_KEY) {
+      return SUPPORT_TITLE;
+    }
+
+    const isCurrentUserStaff = await this.isInstitutionStaffParticipant(
+      conversation.institutionId,
+      currentUserId,
+    );
+
+    if (!isCurrentUserStaff) {
+      return institutionName;
+    }
+
+    const staffMemberships = conversation.institutionId
+      ? await this.staffMembershipModel
+          .find({
+            institutionId: conversation.institutionId,
+            status: InstitutionStaffMembershipStatus.ACTIVE,
+          })
+          .select('userId')
+          .lean()
+          .exec()
+      : [];
+    const staffUserIds = new Set(
+      staffMemberships.map((membership) => membership.userId.toString()),
+    );
+    const counterpartUserId = conversation.participantIds.find((participantId) => {
+      const id = participantId.toString();
+      return id !== currentUserId.toString() && !staffUserIds.has(id);
+    });
+
+    if (!counterpartUserId) {
+      return institutionName;
+    }
+
+    const counterpart = await this.userModel
+      .findById(counterpartUserId)
+      .select('fullName email')
+      .lean()
+      .exec();
+
+    return counterpart?.fullName ?? counterpart?.email ?? institutionName;
+  }
+
   private async toConversationResponse(
     conversation: ConversationRecord,
     currentUserId: Types.ObjectId,
@@ -148,6 +219,11 @@ export class ConversationsService {
       conversation.title ??
       (await this.getInstitutionName(conversation.institutionId)) ??
       'Instituição';
+    const displayName = await this.getCounterpartName(
+      conversation,
+      currentUserId,
+      institutionName,
+    );
 
     return {
       id: conversation._id?.toString() ?? conversation.id,
@@ -156,6 +232,8 @@ export class ConversationsService {
           ? SUPPORT_SUBJECT_KEY
           : conversation.institutionId?.toString(),
       campaignId: conversation.campaignId?.toString(),
+      counterpartName: displayName,
+      displayName,
       institutionName,
       lastMessage: lastMessage?.content ?? '',
       lastMessageAt:
@@ -387,6 +465,25 @@ export class ConversationsService {
     const conversationResponse = await this.toConversationResponse(
       conversation,
       userId,
+    );
+    const recipients = participantIds.filter(
+      (participantId) => participantId !== userId.toString(),
+    );
+
+    await Promise.all(
+      recipients.map((recipientId) =>
+        this.notificationsService.create({
+          body: content,
+          data: {
+            conversationId: conversation._id.toString(),
+            institutionId: conversation.institutionId?.toString(),
+            messageId: message._id.toString(),
+          },
+          title: `Nova mensagem de ${conversationResponse.institutionName}`,
+          type: NotificationType.NEW_MESSAGE,
+          userId: new Types.ObjectId(recipientId),
+        }),
+      ),
     );
 
     this.conversationsGateway.emitMessageCreated(participantIds, response);
