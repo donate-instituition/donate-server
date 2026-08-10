@@ -187,6 +187,18 @@ export class Campaign {
         type: Number,
         default: 0,
       },
+      likesCount: {
+        type: Number,
+        default: 0,
+      },
+      commentsCount: {
+        type: Number,
+        default: 0,
+      },
+      sharesCount: {
+        type: Number,
+        default: 0,
+      },
       donationsCount: {
         type: Number,
         default: 0,
@@ -198,6 +210,9 @@ export class Campaign {
     }),
     default: {
       followersCount: 0,
+      likesCount: 0,
+      commentsCount: 0,
+      sharesCount: 0,
       donationsCount: 0,
       postsCount: 0,
     },
