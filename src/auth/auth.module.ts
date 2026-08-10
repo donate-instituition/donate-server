@@ -21,10 +21,6 @@ import {
   RefreshTokenSession,
   RefreshTokenSessionSchema,
 } from './schemas/refresh-token-session.schema';
-import {
-  PasswordResetRequest,
-  PasswordResetRequestSchema,
-} from './schemas/password-reset-request.schema';
 
 @Module({
   imports: [
@@ -33,7 +29,6 @@ import {
     AuditLogsModule,
     MongooseModule.forFeature([
       { name: RefreshTokenSession.name, schema: RefreshTokenSessionSchema },
-      { name: PasswordResetRequest.name, schema: PasswordResetRequestSchema },
       { name: Institution.name, schema: InstitutionSchema },
       {
         name: InstitutionStaffMembership.name,

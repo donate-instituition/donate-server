@@ -9,6 +9,36 @@ import { AuthService } from './auth.service';
 import { createAccountActivationToken } from './account-activation';
 import type { AuthenticatedUser } from './types/authenticated-user.type';
 
+// In-memory stand-in for RedisService, so these tests don't need a live
+// Redis connection. Only implements what AuthService actually calls.
+function createFakeRedisService() {
+  const store = new Map<string, { value: unknown; expiresAt: number }>();
+
+  return {
+    del(key: string) {
+      return Promise.resolve(store.delete(key) ? 1 : 0);
+    },
+    get<T>(key: string): Promise<T | null> {
+      const entry = store.get(key);
+      if (!entry || entry.expiresAt <= Date.now()) return Promise.resolve(null);
+      return Promise.resolve(entry.value as T);
+    },
+    pttl(key: string): Promise<number | null> {
+      const entry = store.get(key);
+      if (!entry) return Promise.resolve(null);
+      const remaining = entry.expiresAt - Date.now();
+      return Promise.resolve(remaining > 0 ? remaining : null);
+    },
+    set<T>(key: string, value: T, ttlSeconds?: number) {
+      store.set(key, {
+        value,
+        expiresAt: Date.now() + (ttlSeconds ?? 3600) * 1000,
+      });
+      return Promise.resolve();
+    },
+  };
+}
+
 describe('AuthService', () => {
   function createAuthService(overrides: {
     auditLogsService?: { create: jest.Mock };
@@ -16,7 +46,7 @@ describe('AuthService', () => {
     emailJobsService?: Record<string, jest.Mock>;
     institutionModel?: Record<string, unknown>;
     institutionStaffMembershipModel?: Record<string, unknown>;
-    passwordResetRequestModel?: Record<string, unknown>;
+    redisService?: ReturnType<typeof createFakeRedisService>;
     refreshTokenSessionModel?: Record<string, unknown>;
     usersService?: Record<string, unknown>;
   }) {
@@ -37,9 +67,9 @@ describe('AuthService', () => {
           .mockImplementation((_, fallback) => Promise.resolve(fallback)),
       }) as never,
       (overrides.refreshTokenSessionModel ?? {}) as never,
-      (overrides.passwordResetRequestModel ?? {}) as never,
       (overrides.institutionModel ?? {}) as never,
       (overrides.institutionStaffMembershipModel ?? {}) as never,
+      (overrides.redisService ?? createFakeRedisService()) as never,
     );
   }
 
@@ -87,7 +117,6 @@ describe('AuthService', () => {
         .fn()
         .mockReturnValue({ exec: jest.fn().mockResolvedValue({}) }),
     };
-    const passwordResetRequestModel = {};
     const emailJobsService = {
       sendAccountCreatedEmail: jest.fn().mockResolvedValue(undefined),
       sendPasswordResetCodeEmail: jest.fn().mockResolvedValue(undefined),
@@ -99,7 +128,6 @@ describe('AuthService', () => {
     const authService = createAuthService({
       auditLogsService,
       emailJobsService,
-      passwordResetRequestModel,
       refreshTokenSessionModel,
       usersService: usersService as never,
     });
@@ -275,5 +303,147 @@ describe('AuthService', () => {
         action: 'auth.activation_resent',
       }),
     );
+  });
+
+  describe('password reset via Redis', () => {
+    function createPasswordResetUsersService(userId: Types.ObjectId) {
+      return {
+        findByEmail: jest.fn().mockResolvedValue({
+          _id: userId,
+          email: 'donor@example.com',
+          fullName: 'Donor Example',
+          status: UserStatus.ACTIVE,
+        }),
+        update: jest.fn().mockResolvedValue({ fullName: 'Donor Example' }),
+      };
+    }
+
+    function createRefreshTokenSessionModel() {
+      return {
+        updateMany: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue({}) }),
+      };
+    }
+
+    it('stores a hashed code in Redis and emails it', async () => {
+      const userId = new Types.ObjectId();
+      const usersService = createPasswordResetUsersService(userId);
+      const emailJobsService = {
+        sendPasswordResetCodeEmail: jest.fn().mockResolvedValue(undefined),
+      };
+      const redisService = createFakeRedisService();
+      const authService = createAuthService({
+        emailJobsService,
+        redisService,
+        usersService,
+      });
+
+      await authService.forgotPassword({ email: 'donor@example.com' });
+
+      expect(emailJobsService.sendPasswordResetCodeEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: expect.stringMatching(/^\d{6}$/),
+          to: 'donor@example.com',
+        }),
+      );
+      const stored = await redisService.get('password-reset:donor@example.com');
+      expect(stored).toEqual(expect.objectContaining({ attempts: 0 }));
+    });
+
+    it('increments attempts on a wrong code without resetting the TTL, then accepts the right one', async () => {
+      const userId = new Types.ObjectId();
+      const usersService = createPasswordResetUsersService(userId);
+      const emailJobsService = {
+        sendPasswordResetCodeEmail: jest.fn().mockResolvedValue(undefined),
+        sendTemporaryPasswordEmail: jest.fn().mockResolvedValue(undefined),
+      };
+      const redisService = createFakeRedisService();
+      const refreshTokenSessionModel = createRefreshTokenSessionModel();
+      const authService = createAuthService({
+        emailJobsService,
+        redisService,
+        refreshTokenSessionModel,
+        usersService,
+      });
+
+      await authService.forgotPassword({ email: 'donor@example.com' });
+      const code = (
+        emailJobsService.sendPasswordResetCodeEmail.mock.calls[0][0] as {
+          code: string;
+        }
+      ).code;
+      const wrongCode = code === '000000' ? '111111' : '000000';
+
+      await expect(
+        authService.confirmForgotPassword({
+          email: 'donor@example.com',
+          code: wrongCode,
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'PASSWORD_RESET_CODE_INVALID',
+        }),
+      });
+
+      const afterWrongGuess = await redisService.get<{ attempts: number }>(
+        'password-reset:donor@example.com',
+      );
+      expect(afterWrongGuess?.attempts).toBe(1);
+
+      const response = await authService.confirmForgotPassword({
+        email: 'donor@example.com',
+        code,
+      });
+
+      expect(response.message).toContain('senha temporária');
+      expect(usersService.update).toHaveBeenCalledWith(
+        userId.toString(),
+        expect.objectContaining({ passwordChangeRequired: true }),
+      );
+      expect(
+        await redisService.get('password-reset:donor@example.com'),
+      ).toBeNull();
+    });
+
+    it('rejects confirmation once attempts reach the limit', async () => {
+      const userId = new Types.ObjectId();
+      const usersService = createPasswordResetUsersService(userId);
+      const emailJobsService = {
+        sendPasswordResetCodeEmail: jest.fn().mockResolvedValue(undefined),
+      };
+      const redisService = createFakeRedisService();
+      const authService = createAuthService({
+        emailJobsService,
+        redisService,
+        usersService,
+      });
+
+      await authService.forgotPassword({ email: 'donor@example.com' });
+      const code = (
+        emailJobsService.sendPasswordResetCodeEmail.mock.calls[0][0] as {
+          code: string;
+        }
+      ).code;
+      const wrongCode = code === '000000' ? '111111' : '000000';
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await expect(
+          authService.confirmForgotPassword({
+            email: 'donor@example.com',
+            code: wrongCode,
+          }),
+        ).rejects.toBeDefined();
+      }
+
+      // Even the correct code is now rejected — the record maxed out attempts.
+      await expect(
+        authService.confirmForgotPassword({ email: 'donor@example.com', code }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'PASSWORD_RESET_CODE_INVALID',
+        }),
+      });
+    });
   });
 });

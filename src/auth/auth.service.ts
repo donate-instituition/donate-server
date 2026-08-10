@@ -12,6 +12,7 @@ import { randomBytes, randomInt, randomUUID } from 'crypto';
 import { sign, verify } from 'jsonwebtoken';
 import { Model, Types } from 'mongoose';
 
+import { RedisService } from '../cache';
 import { env } from '../config/env';
 import { AppSettingKey } from '../domains/app-settings/app-settings.defaults';
 import { AppSettingsService } from '../domains/app-settings/app-settings.service';
@@ -42,11 +43,6 @@ import {
   RefreshTokenSession,
   RefreshTokenSessionDocument,
 } from './schemas/refresh-token-session.schema';
-import {
-  PasswordResetRequest,
-  PasswordResetRequestDocument,
-  PasswordResetRequestStatus,
-} from './schemas/password-reset-request.schema';
 import type { AuthenticatedUser } from './types/authenticated-user.type';
 import {
   createAccountActivationUrl,
@@ -65,12 +61,11 @@ export class AuthService implements OnModuleInit {
     private readonly appSettingsService: AppSettingsService,
     @InjectModel(RefreshTokenSession.name)
     private readonly refreshTokenSessionModel: Model<RefreshTokenSessionDocument>,
-    @InjectModel(PasswordResetRequest.name)
-    private readonly passwordResetRequestModel: Model<PasswordResetRequestDocument>,
     @InjectModel(Institution.name)
     private readonly institutionModel: Model<InstitutionDocument>,
     @InjectModel(InstitutionStaffMembership.name)
     private readonly institutionStaffMembershipModel: Model<InstitutionStaffMembershipDocument>,
+    private readonly redisService: RedisService,
   ) {}
 
   async onModuleInit() {
@@ -858,6 +853,10 @@ export class AuthService implements OnModuleInit {
     return this.toSessionUser(updatedUser);
   }
 
+  private passwordResetKey(email: string) {
+    return `password-reset:${email}`;
+  }
+
   async forgotPassword(body: { email: string }) {
     const email = body.email?.trim().toLowerCase();
     const response = {
@@ -876,19 +875,15 @@ export class AuthService implements OnModuleInit {
     }
 
     const code = this.generateResetCode();
+    const resetRequestId = randomUUID();
 
-    await this.passwordResetRequestModel
-      .updateMany(
-        { email, status: PasswordResetRequestStatus.Pending },
-        { status: PasswordResetRequestStatus.Used, usedAt: new Date() },
-      )
-      .exec();
-
-    const resetRequest = await this.passwordResetRequestModel.create({
-      codeHash: await hash(code, 10),
-      email,
-      expiresAt: new Date(Date.now() + 1000 * 60 * 15),
-    });
+    // A plain `set` overwrites any prior pending code for this email, so
+    // there's no separate "invalidate previous pending requests" step.
+    await this.redisService.set(
+      this.passwordResetKey(email),
+      { codeHash: await hash(code, 10), attempts: 0, resetRequestId },
+      env.passwordResetTtlSeconds,
+    );
     await this.audit({
       action: 'auth.password_reset_requested',
       targetId: user._id.toString(),
@@ -900,7 +895,7 @@ export class AuthService implements OnModuleInit {
       code,
       email,
       name: user.fullName ?? user.email,
-      resetRequestId: resetRequest._id.toString(),
+      resetRequestId,
       userId: user._id.toString(),
     });
 
@@ -922,14 +917,12 @@ export class AuthService implements OnModuleInit {
       });
     }
 
-    const resetRequest = await this.passwordResetRequestModel
-      .findOne({
-        email,
-        expiresAt: { $gt: new Date() },
-        status: PasswordResetRequestStatus.Pending,
-      })
-      .sort({ createdAt: -1 })
-      .exec();
+    const key = this.passwordResetKey(email);
+    const resetRequest = await this.redisService.get<{
+      codeHash: string;
+      attempts: number;
+      resetRequestId: string;
+    }>(key);
 
     if (!resetRequest || resetRequest.attempts >= 5) {
       throw new BadRequestException({
@@ -942,8 +935,15 @@ export class AuthService implements OnModuleInit {
     const codeMatches = await compare(code, resetRequest.codeHash);
 
     if (!codeMatches) {
-      resetRequest.attempts += 1;
-      await resetRequest.save();
+      // Preserve the remaining TTL so a wrong guess doesn't reset the
+      // 15-minute window back to full.
+      const remainingMs = (await this.redisService.pttl(key)) ?? 0;
+      const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+      await this.redisService.set(
+        key,
+        { ...resetRequest, attempts: resetRequest.attempts + 1 },
+        remainingSeconds,
+      );
       throw new BadRequestException({
         statusCode: 400,
         code: 'PASSWORD_RESET_CODE_INVALID',
@@ -954,9 +954,7 @@ export class AuthService implements OnModuleInit {
     const user = await this.usersService.findByEmail(email);
 
     if (!user || user.status === UserStatus.DELETED) {
-      resetRequest.status = PasswordResetRequestStatus.Used;
-      resetRequest.usedAt = new Date();
-      await resetRequest.save();
+      await this.redisService.del(key);
       return {
         message:
           'Se o código estiver correto, enviaremos uma senha temporária por e-mail.',
@@ -969,15 +967,13 @@ export class AuthService implements OnModuleInit {
       passwordHash: await hash(temporaryPassword, 10),
     });
 
-    resetRequest.status = PasswordResetRequestStatus.Used;
-    resetRequest.usedAt = new Date();
-    await resetRequest.save();
+    await this.redisService.del(key);
 
     await this.revokeRefreshToken(undefined, user._id.toString());
     await this.queueTemporaryPasswordEmail({
       email,
       name: updatedUser?.fullName ?? user.fullName ?? user.email,
-      resetRequestId: resetRequest._id.toString(),
+      resetRequestId: resetRequest.resetRequestId,
       temporaryPassword,
       userId: user._id.toString(),
     });
