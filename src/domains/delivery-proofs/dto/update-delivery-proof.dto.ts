@@ -5,7 +5,13 @@ import type { DeliveryProofMetadata } from '../models';
 export class UpdateDeliveryProofDto {
   donationId?: Types.ObjectId;
 
+  campaignId?: Types.ObjectId;
+
   photoUrl?: string;
+
+  fileName?: string;
+
+  contentType?: string;
 
   description?: string;
 

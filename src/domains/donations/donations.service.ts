@@ -26,6 +26,11 @@ import { Donation, DonationDocument } from './schemas/donation.schema';
 import { PaymentStatus } from '../payments/models';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import {
+  InstitutionStaffMembership,
+  InstitutionStaffMembershipDocument,
+} from '../institution-staff-memberships/schemas/institution-staff-membership.schema';
+import { InstitutionStaffMembershipStatus } from '../institution-staff-memberships/models';
+import {
   TaxReceipt,
   TaxReceiptDocument,
 } from '../tax-receipts/schemas/tax-receipt.schema';
@@ -40,6 +45,8 @@ export class DonationsService {
     private readonly campaignModel: Model<CampaignDocument>,
     @InjectModel(Institution.name)
     private readonly institutionModel: Model<InstitutionDocument>,
+    @InjectModel(InstitutionStaffMembership.name)
+    private readonly institutionStaffMembershipModel: Model<InstitutionStaffMembershipDocument>,
     @InjectModel(Payment.name)
     private readonly paymentModel: Model<PaymentDocument>,
     @InjectModel(TaxReceipt.name)
@@ -81,10 +88,7 @@ export class DonationsService {
           .lean()
           .exec()
       : undefined;
-    const gatewayPayload = (payment?.gatewayPayload ?? {}) as Record<
-      string,
-      unknown
-    >;
+    const gatewayPayload = payment?.gatewayPayload ?? {};
     const amountCents = donation.moneyDonation?.amount
       ? Math.round(donation.moneyDonation.amount * 100)
       : 0;
@@ -253,6 +257,39 @@ export class DonationsService {
       .sort({ createdAt: -1 })
       .lean()
       .exec();
+    return Promise.all(
+      donations.map((donation) => this.enrichDonation(donation)),
+    );
+  }
+
+  async findMyInstitutionDonations(userId?: string) {
+    await this.ensureSeedData();
+
+    if (!userId || !Types.ObjectId.isValid(userId)) {
+      return [];
+    }
+
+    const memberships = await this.institutionStaffMembershipModel
+      .find({
+        userId: new Types.ObjectId(userId),
+        status: InstitutionStaffMembershipStatus.ACTIVE,
+      })
+      .lean()
+      .exec();
+    const institutionIds = memberships.map(
+      (membership) => membership.institutionId,
+    );
+
+    if (institutionIds.length === 0) {
+      return [];
+    }
+
+    const donations = await this.donationModel
+      .find({ institutionId: { $in: institutionIds } })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+
     return Promise.all(
       donations.map((donation) => this.enrichDonation(donation)),
     );

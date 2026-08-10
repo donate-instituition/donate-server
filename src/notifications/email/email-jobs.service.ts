@@ -87,11 +87,26 @@ export class EmailJobsService {
       supportEmail,
       supportPhone,
     ] = await Promise.all([
-      this.appSettingsService.getString(AppSettingKey.EMAIL_BRAND_HERO_URL, env.emailBrandHeroUrl),
-      this.appSettingsService.getString(AppSettingKey.EMAIL_BRAND_LOGO_URL, env.emailBrandLogoUrl),
-      this.appSettingsService.getString(AppSettingKey.EMAIL_PUBLIC_APP_URL, env.emailPublicAppUrl),
-      this.appSettingsService.getString(AppSettingKey.EMAIL_SUPPORT_EMAIL, env.emailSupportEmail),
-      this.appSettingsService.getString(AppSettingKey.EMAIL_SUPPORT_PHONE, env.emailSupportPhone),
+      this.appSettingsService.getString(
+        AppSettingKey.EMAIL_BRAND_HERO_URL,
+        env.emailBrandHeroUrl,
+      ),
+      this.appSettingsService.getString(
+        AppSettingKey.EMAIL_BRAND_LOGO_URL,
+        env.emailBrandLogoUrl,
+      ),
+      this.appSettingsService.getString(
+        AppSettingKey.EMAIL_PUBLIC_APP_URL,
+        env.emailPublicAppUrl,
+      ),
+      this.appSettingsService.getString(
+        AppSettingKey.EMAIL_SUPPORT_EMAIL,
+        env.emailSupportEmail,
+      ),
+      this.appSettingsService.getString(
+        AppSettingKey.EMAIL_SUPPORT_PHONE,
+        env.emailSupportPhone,
+      ),
     ]);
 
     return {
@@ -174,14 +189,16 @@ export class EmailJobsService {
           html: this.renderBrandedEmail(await this.getEmailSettings(), {
             badge: 'Recuperação de senha',
             bodyHtml: `<p>Olá, ${this.escapeHtml(input.name)}.</p><p>Recebemos uma solicitação para recuperar o acesso à sua conta EloDoar.</p><p>Digite o código abaixo no app para confirmar que foi você. Ele expira em 15 minutos.</p>`,
-            contactContext: 'Se você não solicitou essa recuperação, ignore este email ou fale com o suporte.',
+            contactContext:
+              'Se você não solicitou essa recuperação, ignore este email ou fale com o suporte.',
             headline: 'Use este código no app',
             highlight: {
               label: 'Código de confirmação',
               value: input.code,
             },
             preheader: `Seu código de recuperação é ${input.code}.`,
-            securityNote: 'O EloDoar nunca pede sua senha por email, telefone ou mensagem. Use este código apenas dentro do app.',
+            securityNote:
+              'O EloDoar nunca pede sua senha por email, telefone ou mensagem. Use este código apenas dentro do app.',
           }),
           metadata: {
             template: 'password-reset-code',
@@ -207,14 +224,17 @@ export class EmailJobsService {
           html: this.renderBrandedEmail(await this.getEmailSettings(), {
             badge: 'Senha temporária',
             bodyHtml: `<p>Olá, ${this.escapeHtml(input.name)}.</p><p>Seu código foi confirmado e criamos uma senha temporária para você acessar sua conta.</p><p>Entre no app usando a senha abaixo. Logo após o login, você será obrigado a criar uma nova senha definitiva.</p>`,
-            contactContext: 'Se você não pediu a recuperação de senha, fale com o suporte imediatamente.',
+            contactContext:
+              'Se você não pediu a recuperação de senha, fale com o suporte imediatamente.',
             headline: 'Sua senha temporária chegou',
             highlight: {
               label: 'Senha temporária',
               value: input.temporaryPassword,
             },
-            preheader: 'Criamos uma senha temporária para você recuperar o acesso.',
-            securityNote: 'Troque essa senha assim que entrar. Depois da troca, a senha temporária deixa de ser necessária.',
+            preheader:
+              'Criamos uma senha temporária para você recuperar o acesso.',
+            securityNote:
+              'Troque essa senha assim que entrar. Depois da troca, a senha temporária deixa de ser necessária.',
           }),
           metadata: {
             template: 'temporary-password',
@@ -247,7 +267,8 @@ export class EmailJobsService {
               value: input.amountFormatted,
             },
             preheader: `Doação confirmada: ${input.amountFormatted}.`,
-            securityNote: 'Pagamentos são processados pela Stripe. O EloDoar nunca solicita dados do cartão por email ou mensagem.',
+            securityNote:
+              'Pagamentos são processados pela Stripe. O EloDoar nunca solicita dados do cartão por email ou mensagem.',
           }),
           metadata: {
             receiptNumber: input.receiptNumber,
@@ -263,7 +284,10 @@ export class EmailJobsService {
     );
   }
 
-  private renderBrandedEmail(settings: Awaited<ReturnType<EmailJobsService['getEmailSettings']>>, input: BrandedEmailInput) {
+  private renderBrandedEmail(
+    settings: Awaited<ReturnType<EmailJobsService['getEmailSettings']>>,
+    input: BrandedEmailInput,
+  ) {
     const logo = settings.brandLogoUrl
       ? `<img src="${this.escapeAttribute(settings.brandLogoUrl)}" width="56" height="56" alt="EloDoar" style="display:block;border:0;border-radius:16px;object-fit:cover;">`
       : `<div style="width:56px;height:56px;border-radius:16px;background:${brand.primarySoft};color:${brand.primary};font-size:30px;line-height:56px;text-align:center;font-weight:800;">&hearts;</div>`;

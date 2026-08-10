@@ -16,7 +16,7 @@ import { DonationsService } from './donations.service';
 
 @Controller('donations')
 export class DonationsController {
-  constructor(private readonly donationsService: DonationsService) { }
+  constructor(private readonly donationsService: DonationsService) {}
 
   @Post()
   create(
@@ -29,6 +29,13 @@ export class DonationsController {
   @Get('me')
   findMyDonations(@CurrentUser() user: AuthenticatedUser | undefined) {
     return this.donationsService.findMyDonations(user?.sub);
+  }
+
+  @Get('institution/me')
+  findMyInstitutionDonations(
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
+    return this.donationsService.findMyInstitutionDonations(user?.sub);
   }
 
   @Get()

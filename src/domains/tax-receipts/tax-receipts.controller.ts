@@ -38,7 +38,10 @@ export class TaxReceiptsController {
     @Query('token') token: string | undefined,
     @Res() response: Response,
   ) {
-    const downloadUrl = await this.taxReceiptsService.getPdfDownloadUrl(id, token);
+    const downloadUrl = await this.taxReceiptsService.getPdfDownloadUrl(
+      id,
+      token,
+    );
     if (isAbsolute(downloadUrl)) {
       return response.sendFile(downloadUrl);
     }

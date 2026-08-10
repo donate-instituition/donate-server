@@ -16,11 +16,20 @@ export type DeliveryProofDocument = HydratedDocument<DeliveryProof>;
 export class DeliveryProof {
   _id!: Types.ObjectId;
 
-  @Prop({ required: true, type: Types.ObjectId, ref: 'Donation' })
-  donationId!: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Donation' })
+  donationId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Campaign' })
+  campaignId?: Types.ObjectId;
 
   @Prop({ required: true, trim: true })
   photoUrl!: string;
+
+  @Prop({ trim: true })
+  fileName?: string;
+
+  @Prop({ trim: true })
+  contentType?: string;
 
   @Prop({ trim: true })
   description?: string;

@@ -1,4 +1,8 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'crypto';
@@ -76,7 +80,9 @@ export class ObjectStorageService {
 
   private getS3Bucket() {
     if (!env.s3Bucket) {
-      throw new Error('S3_BUCKET must be configured when OBJECT_STORAGE_DRIVER=s3.');
+      throw new Error(
+        'S3_BUCKET must be configured when OBJECT_STORAGE_DRIVER=s3.',
+      );
     }
 
     return env.s3Bucket;

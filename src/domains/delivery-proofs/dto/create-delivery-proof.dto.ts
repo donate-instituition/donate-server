@@ -3,9 +3,15 @@ import { Types } from 'mongoose';
 import type { DeliveryProofMetadata } from '../models';
 
 export class CreateDeliveryProofDto {
-  donationId!: Types.ObjectId;
+  donationId?: Types.ObjectId;
 
-  photoUrl!: string;
+  campaignId?: Types.ObjectId;
+
+  photoUrl?: string;
+
+  fileName?: string;
+
+  contentType?: string;
 
   description?: string;
 

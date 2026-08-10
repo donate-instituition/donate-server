@@ -2,7 +2,9 @@ import { DonationsService } from './donations.service';
 
 describe('DonationsService', () => {
   const donationModel = {
-    countDocuments: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(1) }),
+    countDocuments: jest
+      .fn()
+      .mockReturnValue({ exec: jest.fn().mockResolvedValue(1) }),
     create: jest.fn().mockResolvedValue({
       _id: 'don-1',
       campaignId: '1',
@@ -11,19 +13,50 @@ describe('DonationsService', () => {
       status: 'PAID',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
     }),
-    find: jest.fn().mockReturnValue({ sort: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }) }) }),
-    findById: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }) }),
+    find: jest.fn().mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        lean: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
+      }),
+    }),
+    findById: jest.fn().mockReturnValue({
+      lean: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }),
+    }),
   };
 
   const campaignModel = {
-    findById: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ institutionId: 'inst-1', title: 'Campanha Teste' }) }) }),
-    findByIdAndUpdate: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({}) }),
-    findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'campaign-1' }) }) }),
+    findById: jest.fn().mockReturnValue({
+      lean: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          institutionId: 'inst-1',
+          title: 'Campanha Teste',
+        }),
+      }),
+    }),
+    findByIdAndUpdate: jest
+      .fn()
+      .mockReturnValue({ exec: jest.fn().mockResolvedValue({}) }),
+    findOne: jest.fn().mockReturnValue({
+      lean: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ _id: 'campaign-1' }),
+      }),
+    }),
   };
 
   const institutionModel = {
-    findById: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ displayName: 'Instituição Teste' }) }) }),
-    findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'inst-1' }) }) }),
+    findById: jest.fn().mockReturnValue({
+      lean: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ displayName: 'Instituição Teste' }),
+      }),
+    }),
+    findOne: jest.fn().mockReturnValue({
+      lean: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ _id: 'inst-1' }),
+      }),
+    }),
   };
 
   const paymentModel = {
