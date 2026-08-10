@@ -26,7 +26,9 @@ describe('InstitutionStaffMembershipsService', () => {
         email: 'staff@example.com',
         activationTokenVersion: 'activation-version',
       }),
-      findOne: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }),
+      findOne: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }),
     };
     const emailJobsService = {
       sendAccountCreatedEmail: jest.fn().mockResolvedValue(undefined),
@@ -112,7 +114,9 @@ describe('InstitutionStaffMembershipsService', () => {
           roles: [UserRole.INSTITUTION_STAFF],
         } as never,
       ),
-    ).rejects.toThrow('Only institution admins or managers can create staff users');
+    ).rejects.toThrow(
+      'Only institution admins or managers can create staff users',
+    );
   });
 
   it('lists the current institution team with user details and permissions', async () => {

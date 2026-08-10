@@ -4,6 +4,7 @@ import { InstitutionDonationType, InstitutionStatus } from '../models';
 import type {
   InstitutionAddress,
   InstitutionStats,
+  InstitutionStripeConnect,
   InstitutionVerification,
 } from '../models';
 
@@ -39,6 +40,8 @@ export class CreateInstitutionDto {
   pixKey?: string;
 
   stripeConnectAccountId?: string;
+
+  stripeConnect?: InstitutionStripeConnect;
 
   acceptsRecurringDonations?: boolean;
 

@@ -156,24 +156,22 @@ export class StripeWebhookProcessorService
       );
 
       if (event.type === 'payment_intent.succeeded') {
-        await this.handlePaymentIntentSucceeded(
-          event.data.object as Stripe.PaymentIntent,
-        );
+        await this.handlePaymentIntentSucceeded(event.data.object);
       }
 
       if (
         event.type === 'payment_intent.payment_failed' ||
         event.type === 'payment_intent.canceled'
       ) {
-        await this.handlePaymentIntentTerminalFailure(
-          event.data.object as Stripe.PaymentIntent,
-        );
+        await this.handlePaymentIntentTerminalFailure(event.data.object);
       }
 
       if (event.type === 'invoice.payment_succeeded') {
-        await this.handleInvoicePaymentSucceeded(
-          event.data.object as Stripe.Invoice,
-        );
+        await this.handleInvoicePaymentSucceeded(event.data.object);
+      }
+
+      if (event.type === 'account.updated') {
+        await this.handleAccountUpdated(event.data.object);
       }
 
       await this.stripeWebhookEventModel
@@ -274,6 +272,42 @@ export class StripeWebhookProcessorService
       donation._id.toString(),
       payment._id.toString(),
     );
+  }
+
+  private async handleAccountUpdated(account: Stripe.Account) {
+    const requirementsCurrentlyDue =
+      account.requirements?.currently_due?.filter(Boolean) ?? [];
+    const ready = Boolean(account.charges_enabled && account.details_submitted);
+
+    await this.institutionModel
+      .updateMany(
+        {
+          $or: [
+            { stripeConnectAccountId: account.id },
+            { 'stripeConnect.accountId': account.id },
+          ],
+        },
+        {
+          $set: {
+            stripeConnectAccountId: account.id,
+            stripeConnect: {
+              accountId: account.id,
+              chargesEnabled: Boolean(account.charges_enabled),
+              country: account.country,
+              defaultCurrency: account.default_currency,
+              detailsSubmitted: Boolean(account.details_submitted),
+              exists: true,
+              livemode: env.stripeSecretKey.startsWith('sk_live_'),
+              payoutsEnabled: Boolean(account.payouts_enabled),
+              ready,
+              requirementsCurrentlyDue,
+              requirementsDisabledReason: account.requirements?.disabled_reason,
+              verifiedAt: new Date(),
+            },
+          },
+        },
+      )
+      .exec();
   }
 
   private async handlePaymentIntentTerminalFailure(

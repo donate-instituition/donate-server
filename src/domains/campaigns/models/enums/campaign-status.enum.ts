@@ -1,5 +1,6 @@
 export enum CampaignStatus {
   DRAFT = 'DRAFT',
+  IN_REVIEW = 'IN_REVIEW',
   PUBLISHED = 'PUBLISHED',
   PAUSED = 'PAUSED',
   FINISHED = 'FINISHED',

@@ -5,6 +5,7 @@ import { InstitutionDonationType, InstitutionStatus } from '../models';
 import type {
   InstitutionAddress,
   InstitutionStats,
+  InstitutionStripeConnect,
   InstitutionVerification,
 } from '../models';
 
@@ -133,6 +134,67 @@ export class Institution {
 
   @Prop({ trim: true })
   stripeConnectAccountId?: string;
+
+  @Prop({
+    type: raw({
+      accountId: {
+        type: String,
+        trim: true,
+      },
+      chargesEnabled: {
+        type: Boolean,
+        default: false,
+      },
+      country: {
+        type: String,
+        trim: true,
+      },
+      defaultCurrency: {
+        type: String,
+        trim: true,
+      },
+      detailsSubmitted: {
+        type: Boolean,
+        default: false,
+      },
+      exists: {
+        type: Boolean,
+        default: false,
+      },
+      livemode: {
+        type: Boolean,
+        default: false,
+      },
+      payoutsEnabled: {
+        type: Boolean,
+        default: false,
+      },
+      ready: {
+        type: Boolean,
+        default: false,
+      },
+      requirementsCurrentlyDue: {
+        type: [String],
+        default: [],
+      },
+      requirementsDisabledReason: {
+        type: String,
+        trim: true,
+      },
+      verifiedAt: {
+        type: Date,
+      },
+    }),
+    default: {
+      chargesEnabled: false,
+      detailsSubmitted: false,
+      exists: false,
+      payoutsEnabled: false,
+      ready: false,
+      requirementsCurrentlyDue: [],
+    },
+  })
+  stripeConnect?: InstitutionStripeConnect;
 
   @Prop({ required: true, default: false })
   acceptsRecurringDonations!: boolean;

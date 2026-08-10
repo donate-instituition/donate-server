@@ -2,7 +2,10 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { Payment, PaymentSchema } from './schemas/payment.schema';
-import { PaymentsController, StripeWebhookController } from './payments.controller';
+import {
+  PaymentsController,
+  StripeWebhookController,
+} from './payments.controller';
 import { StripeWebhookProcessorService } from './stripe-webhook-processor.service';
 import { PaymentsService } from './payments.service';
 import {
@@ -11,7 +14,10 @@ import {
 } from './schemas/stripe-webhook-event.schema';
 import { Campaign, CampaignSchema } from '../campaigns/schemas/campaign.schema';
 import { Donation, DonationSchema } from '../donations/schemas/donation.schema';
-import { Institution, InstitutionSchema } from '../institutions/schemas/institution.schema';
+import {
+  Institution,
+  InstitutionSchema,
+} from '../institutions/schemas/institution.schema';
 import { QueueModule } from '../../queues/queue.module';
 import { AppSettingsModule } from '../app-settings/app-settings.module';
 

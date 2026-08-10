@@ -2,7 +2,10 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { User, UserSchema } from '../users/schemas/user.schema';
-import { Institution, InstitutionSchema } from '../institutions/schemas/institution.schema';
+import {
+  Institution,
+  InstitutionSchema,
+} from '../institutions/schemas/institution.schema';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { EmailJobsModule } from '../../notifications/email/email-jobs.module';
 import {

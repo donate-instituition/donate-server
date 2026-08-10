@@ -61,7 +61,10 @@ export class PaymentsController {
   }
 
   @Post('stripe/subscriptions/:id/cancel')
-  cancelStripeSubscription(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser | undefined) {
+  cancelStripeSubscription(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ) {
     return this.paymentsService.cancelStripeSubscription(id, user?.sub);
   }
 
