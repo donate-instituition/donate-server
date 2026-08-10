@@ -1,6 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
 
-import { createRateLimitMiddleware } from './rate-limit.middleware';
+import {
+  createRateLimitMiddleware,
+  type RateLimitStore,
+} from './rate-limit.middleware';
 
 type MockResponse = Response & {
   body?: unknown;
@@ -45,20 +48,46 @@ function createResponse(): MockResponse {
   return response;
 }
 
+// In-memory stand-in for the Redis-backed store, so these tests don't need a
+// live Redis connection. Mirrors the same fixed-window semantics.
+function createFakeStore(): RateLimitStore {
+  const counters = new Map<string, { count: number; resetAt: number }>();
+
+  return {
+    incrementWindow(key, windowMs) {
+      const now = Date.now();
+      const existing = counters.get(key);
+      const record =
+        existing && existing.resetAt > now
+          ? existing
+          : { count: 0, resetAt: now + windowMs };
+
+      record.count += 1;
+      counters.set(key, record);
+
+      return Promise.resolve({
+        count: record.count,
+        ttlMs: record.resetAt - now,
+      });
+    },
+  };
+}
+
 describe('createRateLimitMiddleware', () => {
-  it('returns 429 when the request limit is exceeded', () => {
+  it('returns 429 when the request limit is exceeded', async () => {
     const middleware = createRateLimitMiddleware({
       name: `test-${Date.now()}`,
       windowMs: 60_000,
       maxRequests: 2,
+      store: createFakeStore(),
     });
     const next: NextFunction = jest.fn();
 
-    middleware(createRequest(), createResponse(), next);
-    middleware(createRequest(), createResponse(), next);
+    await middleware(createRequest(), createResponse(), next);
+    await middleware(createRequest(), createResponse(), next);
 
     const blockedResponse = createResponse();
-    middleware(createRequest(), blockedResponse, next);
+    await middleware(createRequest(), blockedResponse, next);
 
     expect(next).toHaveBeenCalledTimes(2);
     expect(blockedResponse.status).toHaveBeenCalledWith(429);
@@ -71,42 +100,67 @@ describe('createRateLimitMiddleware', () => {
     expect(blockedResponse.headers.get('Retry-After')).toBeDefined();
   });
 
-  it('does not count preflight requests when configured to skip options', () => {
+  it('does not count preflight requests when configured to skip options', async () => {
     const middleware = createRateLimitMiddleware({
       name: `test-options-${Date.now()}`,
       windowMs: 60_000,
       maxRequests: 1,
       skipSuccessfulOptions: true,
+      store: createFakeStore(),
     });
     const next: NextFunction = jest.fn();
 
-    middleware(createRequest('OPTIONS'), createResponse(), next);
-    middleware(createRequest('POST'), createResponse(), next);
+    await middleware(createRequest('OPTIONS'), createResponse(), next);
+    await middleware(createRequest('POST'), createResponse(), next);
 
     const blockedResponse = createResponse();
-    middleware(createRequest('POST'), blockedResponse, next);
+    await middleware(createRequest('POST'), blockedResponse, next);
 
     expect(next).toHaveBeenCalledTimes(2);
     expect(blockedResponse.status).toHaveBeenCalledWith(429);
   });
 
-  it('can limit all routes for the same client together', () => {
+  it('can limit all routes for the same client together', async () => {
     const middleware = createRateLimitMiddleware({
       name: `test-client-scope-${Date.now()}`,
       windowMs: 60_000,
       maxRequests: 2,
       scope: 'client',
+      store: createFakeStore(),
     });
     const next: NextFunction = jest.fn();
 
-    middleware(createRequest('GET', '/campaigns'), createResponse(), next);
-    middleware(createRequest('GET', '/posts'), createResponse(), next);
+    await middleware(
+      createRequest('GET', '/campaigns'),
+      createResponse(),
+      next,
+    );
+    await middleware(createRequest('GET', '/posts'), createResponse(), next);
 
     const blockedResponse = createResponse();
-    middleware(createRequest('GET', '/donations'), blockedResponse, next);
+    await middleware(createRequest('GET', '/donations'), blockedResponse, next);
 
     expect(next).toHaveBeenCalledTimes(2);
     expect(blockedResponse.status).toHaveBeenCalledWith(429);
+  });
+
+  it('fails open and calls next when the store is unavailable', async () => {
+    const store: RateLimitStore = {
+      incrementWindow: () => Promise.reject(new Error('connection refused')),
+    };
+    const middleware = createRateLimitMiddleware({
+      name: `test-store-down-${Date.now()}`,
+      windowMs: 60_000,
+      maxRequests: 1,
+      store,
+    });
+    const next: NextFunction = jest.fn();
+    const response = createResponse();
+
+    await middleware(createRequest(), response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(response.status).not.toHaveBeenCalled();
   });
 
   it('rejects invalid rate limit settings', () => {

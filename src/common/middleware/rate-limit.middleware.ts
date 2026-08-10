@@ -1,4 +1,16 @@
+import { Logger } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
+
+import { incrementWindow } from '../../cache/redis-client';
+
+type RateLimitWindowResult = { count: number; ttlMs: number };
+
+export type RateLimitStore = {
+  incrementWindow(
+    key: string,
+    windowMs: number,
+  ): Promise<RateLimitWindowResult>;
+};
 
 type RateLimitOptions = {
   name: string;
@@ -6,28 +18,15 @@ type RateLimitOptions = {
   maxRequests: number;
   scope?: 'client' | 'route';
   skipSuccessfulOptions?: boolean;
+  /** Backing counter store; defaults to the shared Redis client. Override in tests. */
+  store?: RateLimitStore;
 };
 
-type RateLimitRecord = {
-  count: number;
-  resetAt: number;
+const logger = new Logger('RateLimit');
+
+const redisRateLimitStore: RateLimitStore = {
+  incrementWindow: (key, windowMs) => incrementWindow(key, windowMs),
 };
-
-const stores = new Map<string, Map<string, RateLimitRecord>>();
-
-const cleanupInterval = setInterval(() => {
-  const now = Date.now();
-
-  for (const store of stores.values()) {
-    for (const [key, record] of store.entries()) {
-      if (record.resetAt <= now) {
-        store.delete(key);
-      }
-    }
-  }
-}, 60_000);
-
-cleanupInterval.unref?.();
 
 function getClientIp(request: Request) {
   const forwardedFor = request.headers['x-forwarded-for'];
@@ -43,26 +42,18 @@ function getClientIp(request: Request) {
   return request.ip || request.socket.remoteAddress || 'unknown';
 }
 
-function getStore(name: string) {
-  const existingStore = stores.get(name);
-
-  if (existingStore) {
-    return existingStore;
-  }
-
-  const store = new Map<string, RateLimitRecord>();
-  stores.set(name, store);
-  return store;
-}
-
-function getRateLimitKey(request: Request, scope: RateLimitOptions['scope']) {
+function getRateLimitKey(
+  name: string,
+  request: Request,
+  scope: RateLimitOptions['scope'],
+) {
   const clientIp = getClientIp(request);
 
   if (scope === 'client') {
-    return clientIp;
+    return `ratelimit:${name}:${clientIp}`;
   }
 
-  return `${clientIp}:${request.method}:${request.path}`;
+  return `ratelimit:${name}:${clientIp}:${request.method}:${request.path}`;
 }
 
 export function createRateLimitMiddleware(options: RateLimitOptions) {
@@ -74,28 +65,33 @@ export function createRateLimitMiddleware(options: RateLimitOptions) {
     throw new Error('Rate limit maxRequests must be greater than zero');
   }
 
-  const store = getStore(options.name);
   const scope = options.scope ?? 'route';
+  const store = options.store ?? redisRateLimitStore;
 
-  return (request: Request, response: Response, next: NextFunction) => {
+  return async (request: Request, response: Response, next: NextFunction) => {
     if (options.skipSuccessfulOptions && request.method === 'OPTIONS') {
       next();
       return;
     }
 
-    const now = Date.now();
-    const key = getRateLimitKey(request, scope);
-    const current = store.get(key);
-    const record =
-      current && current.resetAt > now
-        ? current
-        : { count: 0, resetAt: now + options.windowMs };
+    const key = getRateLimitKey(options.name, request, scope);
+    let result: RateLimitWindowResult;
 
-    record.count += 1;
-    store.set(key, record);
+    try {
+      result = await store.incrementWindow(key, options.windowMs);
+    } catch (error) {
+      // Redis is unavailable: fail open rather than block all traffic.
+      logger.warn(
+        `Rate limit store unavailable for "${options.name}", allowing request: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      next();
+      return;
+    }
 
-    const remaining = Math.max(options.maxRequests - record.count, 0);
-    const resetSeconds = Math.ceil((record.resetAt - now) / 1000);
+    const remaining = Math.max(options.maxRequests - result.count, 0);
+    const resetSeconds = Math.ceil(result.ttlMs / 1000);
 
     response.setHeader('RateLimit-Limit', String(options.maxRequests));
     response.setHeader('RateLimit-Remaining', String(remaining));
@@ -104,7 +100,7 @@ export function createRateLimitMiddleware(options: RateLimitOptions) {
     response.setHeader('X-RateLimit-Remaining', String(remaining));
     response.setHeader('X-RateLimit-Reset', String(resetSeconds));
 
-    if (record.count <= options.maxRequests) {
+    if (result.count <= options.maxRequests) {
       next();
       return;
     }
