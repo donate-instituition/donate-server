@@ -180,11 +180,4 @@ export const env = {
   s3ForcePathStyle: process.env.S3_FORCE_PATH_STYLE?.trim() === 'true',
   s3AccessKeyId: process.env.S3_ACCESS_KEY_ID?.trim() || '',
   s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY?.trim() || '',
-  firebaseProjectId: process.env.FIREBASE_PROJECT_ID?.trim() || '',
-  firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL?.trim() || '',
-  firebasePrivateKey:
-    process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n').trim() || '',
-  firebaseServiceAccountJson:
-    process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim() || '',
-  fcmEnabled: process.env.FCM_ENABLED?.trim() !== 'false',
 };
