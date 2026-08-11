@@ -44,7 +44,7 @@ estão desatualizados — ver ressalvas no fim).
 - **Notification** — `type` (`DONATION_STATUS_UPDATED`, `NEW_FOLLOWER`,
   `NEW_MESSAGE`, `CAMPAIGN_UPDATE`, `CAMPAIGN_GOAL_REACHED`), `data` livre.
 
-## Superfície de API — 24 controllers + 1 gateway WebSocket
+## Superfície de API — 25 controllers + 1 gateway WebSocket
 
 Autenticação JWT Bearer (access token curto + refresh token); rotas
 `@Public()` não exigem token; rotas `@Roles(PLATFORM_ADMIN)` (ou
@@ -58,15 +58,16 @@ controllers de domínio.
 | `users` | CRUD, registro/remoção de push token, detalhe administrativo |
 | `institutions` | leitura pública, fila de aprovação admin (`admin/pending`, `approve`, `reject`), configuração de conta Stripe Connect |
 | `institution-staff-memberships` | vínculo funcionário↔instituição, papel (OWNER/staff), listagem de equipe |
-| `campaigns` | CRUD, publicação, upload de imagem, curtir/comentar/compartilhar |
+| `campaigns` | CRUD, publicação, curtir/comentar/compartilhar (upload de capa migrou para `uploads`) |
 | `donations` | criação, histórico do doador e da instituição |
 | `payments` | criação/confirmação de PaymentIntent Stripe, cancelamento de assinatura, config pública, **webhook do Stripe** (fonte única de verdade sobre status de pagamento) |
-| `tax-receipts` | CRUD + download de PDF assinado (token HMAC) |
+| `tax-receipts` | CRUD + download de PDF (token HMAC na query string; o binário é lido do S3 com as credenciais do próprio servidor e devolvido via `pipe()` na resposta — nunca um redirect para URL assinada do S3) |
+| `uploads` | módulo genérico de upload em duas etapas (`POST /uploads` → grava em `temp/`, `POST /uploads/:id/confirm` → move para a chave final `public/`/`private/`), usado por avatar, logo/capa de instituição, capa de campanha, mídia de post, comprovante de prestação de contas; ver seção "Armazenamento de objetos" |
 | `conversations` / `messages` | chat |
 | `notifications` | inbox in-app, marcar como lida |
 | `posts` / `post-comments` / `post-reactions` | feed, curtidas, comentários, compartilhamento |
 | `follows` | seguir usuário/instituição/campanha |
-| `categories`, `delivery-proofs`, `donation-status-history`, `tracking-events`, `reports`, `audit-logs` | CRUD de apoio |
+| `categories`, `delivery-proofs`, `donation-status-history`, `tracking-events`, `reports`, `audit-logs` | CRUD de apoio (upload de comprovante de `delivery-proofs` migrou para `uploads`) |
 | `app-settings` | configuração dinâmica, só admin |
 | `support-faqs` | FAQ de suporte (pública para leitura) |
 | `terms` | termos de uso versionados + aceite |
@@ -88,6 +89,36 @@ local, que não escalava entre instâncias), sessão/código de verificação de
 `Idempotency-Key`), locks distribuídos onde necessário. Local via Docker
 (`donate-infra`); pronto para apontar para Upstash Redis em produção só
 trocando variável de ambiente.
+
+## Armazenamento de objetos (S3)
+
+Bucket `elodoar-storage-dev` (Terraform em `donate-infra`), driver
+configurável (`OBJECT_STORAGE_DRIVER=s3|local`). Hierarquia de chaves fixa,
+com `public/` (avatar, logo/capa de instituição, capa de campanha, mídia de
+post) e `private/` (documento de usuário/instituição, relatório de
+prestação de contas, comprovante por campanha, recibo/anexo por doação),
+mais `temp/` para uploads ainda não confirmados.
+
+Fluxo em duas etapas via módulo `uploads` (`src/uploads/`): o cliente sobe
+o arquivo para `temp/{uploadId}/`, e só quando a entidade dona é de fato
+conhecida (campanha criada, post salvo, usuário autenticado) o backend
+"confirma" — copia para a chave final e apaga o temporário
+(`ObjectStorageService.moveObject`, `CopyObjectCommand` + `DeleteObjectCommand`
+no driver S3). Cada categoria de upload (`UploadCategory`) tem sua própria
+checagem de permissão (dono do recurso para categorias de usuário, staff
+ativo da instituição para categorias de instituição/campanha) antes de
+autorizar a confirmação. Chave privada só é lida por uma rota autenticada
+que resolve o dono a partir do próprio prefixo da chave
+(`private/users/<id>/...`, `private/campaigns/<id>/proofs/...`, etc.) e
+nunca é servida por link direto.
+
+O recibo fiscal (gerado pelo `donate-workers`) segue o mesmo padrão de
+segurança mas por um caminho mais direto: em vez de devolver uma URL
+assinada do S3 (que expõe o domínio do bucket ao cliente), a rota
+`GET /tax-receipts/:id/pdf` lê o objeto com as credenciais do próprio
+servidor (`ObjectStorageService.getObjectStream`) e faz `pipe()` direto na
+resposta HTTP — o cliente nunca vê `*.amazonaws.com` em lugar nenhum da
+cadeia de requisição, mesmo que o driver seja `s3`.
 
 ## Filas e resiliência
 
@@ -120,6 +151,14 @@ mensagens) é feita aqui.
    na primeira vez** — nunca sobrescreve uma foto que o usuário já tenha
    escolhido manualmente (`toSessionUser` agora devolve `profilePhotoUrl`
    e `notificationSettings` na sessão).
+4. **Persistência real no S3** — módulo `uploads` novo (upload genérico em
+   duas etapas, chave hierárquica `public/`/`private/`/`temp/`), substituindo
+   as rotas de upload ad-hoc que existiam em `campaigns` e `delivery-proofs`
+   (cada uma com sua própria cópia de validação de tipo/tamanho e sem
+   vínculo automático com a entidade). Recibo fiscal passou de "redirect
+   para URL assinada do S3" para "stream do binário através do próprio
+   servidor" — o domínio do bucket deixou de ser exposto ao cliente em
+   qualquer download de PDF.
 
 ## Ressalvas sobre a documentação já existente no repositório
 
