@@ -180,4 +180,5 @@ export const env = {
   s3ForcePathStyle: process.env.S3_FORCE_PATH_STYLE?.trim() === 'true',
   s3AccessKeyId: process.env.S3_ACCESS_KEY_ID?.trim() || '',
   s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY?.trim() || '',
+  googleWebClientId: process.env.GOOGLE_WEB_CLIENT_ID?.trim() || '',
 };

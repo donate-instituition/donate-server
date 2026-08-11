@@ -9,6 +9,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { compare, hash } from 'bcryptjs';
 import { randomBytes, randomInt, randomUUID } from 'crypto';
+import { OAuth2Client, TokenPayload } from 'google-auth-library';
 import { sign, verify } from 'jsonwebtoken';
 import { Model, Types } from 'mongoose';
 
@@ -33,9 +34,12 @@ import {
   InstitutionDocument,
 } from '../domains/institutions/schemas/institution.schema';
 import { UserRole, UserStatus, UserType } from '../domains/users/models';
+import { UserDocument } from '../domains/users/schemas/user.schema';
 import { UsersService } from '../domains/users/users.service';
 import { AuditLogsService } from '../domains/audit-logs/audit-logs.service';
 import { EmailJobsService } from '../notifications/email/email-jobs.service';
+import { CompleteGoogleOnboardingDto } from './dto/complete-google-onboarding.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateMySettingsDto } from './dto/update-my-settings.dto';
@@ -48,11 +52,16 @@ import {
   createAccountActivationUrl,
   verifyAccountActivationToken,
 } from './account-activation';
+import {
+  createGoogleOnboardingToken,
+  verifyGoogleOnboardingToken,
+} from './google-onboarding-token';
 import { assertPasswordPolicy } from './password-policy';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
+  private readonly googleOAuthClient = new OAuth2Client();
 
   constructor(
     private readonly usersService: UsersService,
@@ -177,6 +186,7 @@ export class AuthService implements OnModuleInit {
     fullName?: string;
     name?: string;
     email: string;
+    profilePhotoUrl?: string;
     roles?: Array<
       string | { name: string; grantedAt?: Date; grantedBy?: unknown }
     >;
@@ -195,6 +205,7 @@ export class AuthService implements OnModuleInit {
       id: user._id?.toString() ?? 'pending',
       name: user.fullName ?? user.name ?? user.email,
       email: user.email,
+      profilePhotoUrl: user.profilePhotoUrl,
       roles,
       preferredRole: roles.some((role) => role.name === preferredRole)
         ? preferredRole
@@ -470,21 +481,7 @@ export class AuthService implements OnModuleInit {
     }
   }
 
-  async login(loginDto: LoginDto) {
-    const user = await this.usersService.findByEmail(loginDto.email);
-
-    if (!user) {
-      throw new UnauthorizedException('Invalid email or password');
-    }
-
-    const passwordMatches = await compare(loginDto.password, user.passwordHash);
-
-    if (!passwordMatches) {
-      throw new UnauthorizedException('Invalid email or password');
-    }
-
-    await this.assertCanIssueSession(user);
-
+  private async buildSessionResponse(user: UserDocument) {
     const accessToken = this.createAccessToken(user);
     const refreshToken = this.createRefreshToken(user._id.toString());
     await this.storeRefreshToken(user._id.toString(), refreshToken);
@@ -502,6 +499,71 @@ export class AuthService implements OnModuleInit {
       refreshToken,
       user: this.toSessionUser(user),
     };
+  }
+
+  async login(loginDto: LoginDto) {
+    const user = await this.usersService.findByEmail(loginDto.email);
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const passwordMatches = await compare(loginDto.password, user.passwordHash);
+
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    await this.assertCanIssueSession(user);
+
+    return this.buildSessionResponse(user);
+  }
+
+  private async createInstitutionForUser(
+    user: { _id: Types.ObjectId; fullName: string; email: string },
+    fields: {
+      institutionCnpj: string;
+      institutionLegalName?: string;
+      institutionDisplayName?: string;
+      institutionEmail?: string;
+      institutionPhone?: string;
+      institutionDescription?: string;
+      institutionWebsite?: string;
+    },
+  ) {
+    const institution = await this.institutionModel.create({
+      legalName:
+        fields.institutionLegalName?.trim() ||
+        fields.institutionDisplayName?.trim() ||
+        user.fullName,
+      displayName:
+        fields.institutionDisplayName?.trim() ||
+        fields.institutionLegalName?.trim() ||
+        user.fullName,
+      cnpj: fields.institutionCnpj,
+      email: (fields.institutionEmail || user.email).trim().toLowerCase(),
+      phone: fields.institutionPhone,
+      description: fields.institutionDescription,
+      website: fields.institutionWebsite,
+      status: InstitutionStatus.PENDING_APPROVAL,
+      verification: { isVerified: false },
+      acceptedDonationTypes: [InstitutionDonationType.MONEY],
+      taxReceiptEnabled: true,
+    });
+
+    try {
+      await this.institutionStaffMembershipModel.create({
+        institutionId: institution._id,
+        userId: user._id,
+        role: InstitutionStaffMembershipRole.OWNER,
+        status: InstitutionStaffMembershipStatus.ACTIVE,
+      });
+    } catch (error) {
+      await this.institutionModel.findByIdAndDelete(institution._id).exec();
+      throw error;
+    }
+
+    return institution;
   }
 
   async register(registerDto: RegisterDto) {
@@ -591,41 +653,17 @@ export class AuthService implements OnModuleInit {
 
     try {
       if (accountType === 'INSTITUTION') {
-        const institution = await this.institutionModel.create({
-          legalName:
-            registerDto.institutionLegalName?.trim() ||
-            registerDto.institutionDisplayName?.trim() ||
-            registerDto.name,
-          displayName:
-            registerDto.institutionDisplayName?.trim() ||
-            registerDto.institutionLegalName?.trim() ||
-            registerDto.name,
-          cnpj: normalizedCnpj,
-          email: (registerDto.institutionEmail || normalizedEmail)
-            .trim()
-            .toLowerCase(),
-          phone:
+        const institution = await this.createInstitutionForUser(createdUser, {
+          institutionCnpj: normalizedCnpj,
+          institutionLegalName: registerDto.institutionLegalName,
+          institutionDisplayName: registerDto.institutionDisplayName,
+          institutionEmail: registerDto.institutionEmail || normalizedEmail,
+          institutionPhone:
             registerDto.institutionPhone?.replace(/\D/g, '') ||
             registerDto.phone,
-          description: registerDto.institutionDescription,
-          website: registerDto.institutionWebsite,
-          status: InstitutionStatus.PENDING_APPROVAL,
-          verification: { isVerified: false },
-          acceptedDonationTypes: [InstitutionDonationType.MONEY],
-          taxReceiptEnabled: true,
+          institutionDescription: registerDto.institutionDescription,
+          institutionWebsite: registerDto.institutionWebsite,
         });
-
-        try {
-          await this.institutionStaffMembershipModel.create({
-            institutionId: institution._id,
-            userId: createdUser._id,
-            role: InstitutionStaffMembershipRole.OWNER,
-            status: InstitutionStaffMembershipStatus.ACTIVE,
-          });
-        } catch (error) {
-          await this.institutionModel.findByIdAndDelete(institution._id).exec();
-          throw error;
-        }
 
         await this.audit({
           action: 'auth.account_created',
@@ -671,6 +709,249 @@ export class AuthService implements OnModuleInit {
       message: 'Account created. Check your email to activate your account.',
       email: normalizedEmail,
     };
+  }
+
+  async loginWithGoogle(googleLoginDto: GoogleLoginDto) {
+    if (!googleLoginDto.idToken?.trim()) {
+      throw new UnauthorizedException('Google ID token is missing');
+    }
+
+    let payload: TokenPayload | undefined;
+
+    try {
+      const ticket = await this.googleOAuthClient.verifyIdToken({
+        idToken: googleLoginDto.idToken,
+        audience: env.googleWebClientId,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException('Google ID token is invalid');
+    }
+
+    if (!payload?.sub || !payload.email) {
+      throw new UnauthorizedException('Google ID token is invalid');
+    }
+
+    if (!payload.email_verified) {
+      throw new UnauthorizedException('Google email is not verified');
+    }
+
+    const googleId = payload.sub;
+    const email = payload.email.trim().toLowerCase();
+    const name = payload.name?.trim() || email;
+    const picture = payload.picture?.trim();
+
+    const existingByGoogleId = await this.usersService.findByGoogleId(googleId);
+
+    if (existingByGoogleId) {
+      await this.assertCanIssueSession(existingByGoogleId);
+      return this.buildSessionResponse(existingByGoogleId);
+    }
+
+    const existingByEmail = await this.usersService.findByEmail(email);
+
+    if (existingByEmail) {
+      const linkedUser =
+        (await this.usersService.update(existingByEmail._id.toString(), {
+          googleId,
+          ...(existingByEmail.profilePhotoUrl || !picture
+            ? {}
+            : { profilePhotoUrl: picture }),
+        })) ?? existingByEmail;
+
+      await this.assertCanIssueSession(linkedUser);
+      return this.buildSessionResponse(linkedUser);
+    }
+
+    const createdUser = await this.usersService.create({
+      fullName: name,
+      email,
+      googleId,
+      profilePhotoUrl: picture,
+      passwordHash: await hash(randomBytes(32).toString('hex'), 10),
+      roles: [UserRole.DONOR],
+      type: UserType.PERSON,
+      status: UserStatus.ACTIVE,
+      isVerified: true,
+      termsAccepted: true,
+      termsAcceptedAt: new Date(),
+    });
+
+    await this.audit({
+      action: 'auth.google_signup_started',
+      targetId: createdUser._id.toString(),
+      targetType: 'user',
+      metadata: { email },
+    });
+
+    return {
+      status: 'needs-onboarding' as const,
+      onboardingToken: createGoogleOnboardingToken(createdUser._id.toString()),
+      name: createdUser.fullName,
+      email: createdUser.email,
+    };
+  }
+
+  async completeGoogleOnboarding(
+    completeGoogleOnboardingDto: CompleteGoogleOnboardingDto,
+  ) {
+    if (!completeGoogleOnboardingDto.onboardingToken?.trim()) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'GOOGLE_ONBOARDING_TOKEN_INVALID',
+        message: 'Google onboarding token is invalid',
+      });
+    }
+
+    let payload: { sub: string };
+
+    try {
+      payload = verifyGoogleOnboardingToken(
+        completeGoogleOnboardingDto.onboardingToken.trim(),
+      );
+    } catch {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'GOOGLE_ONBOARDING_TOKEN_INVALID',
+        message: 'Google onboarding token is invalid',
+      });
+    }
+
+    const user = await this.usersService.findOne(payload.sub);
+
+    if (!user) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'GOOGLE_ONBOARDING_TOKEN_INVALID',
+        message: 'Google onboarding token is invalid',
+      });
+    }
+
+    if (!completeGoogleOnboardingDto.cpf?.trim()) {
+      throw new BadRequestException('CPF is required');
+    }
+
+    if (!completeGoogleOnboardingDto.birthDate?.trim()) {
+      throw new BadRequestException('Birth date is required');
+    }
+
+    if (!completeGoogleOnboardingDto.phone?.trim()) {
+      throw new BadRequestException('Phone is required');
+    }
+
+    if (completeGoogleOnboardingDto.password) {
+      assertPasswordPolicy(completeGoogleOnboardingDto.password);
+    }
+
+    const accountType = completeGoogleOnboardingDto.accountType ?? 'DONOR';
+
+    let updatedUser: typeof user | null;
+
+    try {
+      updatedUser = await this.usersService.update(user._id.toString(), {
+        cpf: completeGoogleOnboardingDto.cpf,
+        birthDate: new Date(completeGoogleOnboardingDto.birthDate),
+        phone: completeGoogleOnboardingDto.phone,
+        termsAccepted: true,
+        termsAcceptedAt: new Date(),
+        ...(completeGoogleOnboardingDto.password
+          ? {
+              passwordHash: await hash(
+                completeGoogleOnboardingDto.password,
+                10,
+              ),
+            }
+          : {}),
+      });
+    } catch (error) {
+      if (this.isCpfDuplicateError(error)) {
+        throw new ConflictException('CPF already registered');
+      }
+      throw error;
+    }
+
+    const userWithPersonalInfo = updatedUser ?? user;
+
+    if (accountType === 'INSTITUTION') {
+      const normalizedCnpj =
+        completeGoogleOnboardingDto.institutionCnpj?.replace(/\D/g, '') ?? '';
+
+      if (!normalizedCnpj) {
+        throw new BadRequestException('Institution CNPJ is required');
+      }
+
+      const existingInstitution = await this.institutionModel
+        .findOne({ cnpj: normalizedCnpj })
+        .exec();
+
+      if (existingInstitution) {
+        throw new ConflictException('Institution CNPJ already registered');
+      }
+
+      const institution = await this.createInstitutionForUser(
+        userWithPersonalInfo,
+        {
+          institutionCnpj: normalizedCnpj,
+          institutionLegalName:
+            completeGoogleOnboardingDto.institutionLegalName,
+          institutionDisplayName:
+            completeGoogleOnboardingDto.institutionDisplayName,
+          institutionEmail: completeGoogleOnboardingDto.institutionEmail,
+          institutionPhone: completeGoogleOnboardingDto.institutionPhone,
+          institutionDescription:
+            completeGoogleOnboardingDto.institutionDescription,
+          institutionWebsite: completeGoogleOnboardingDto.institutionWebsite,
+        },
+      );
+
+      await this.usersService.update(user._id.toString(), {
+        roles: [UserRole.INSTITUTION_STAFF, UserRole.DONOR],
+      });
+
+      await this.audit({
+        action: 'auth.account_created',
+        targetId: user._id.toString(),
+        targetType: 'user',
+        metadata: {
+          accountType,
+          email: user.email,
+          institutionId: institution._id.toString(),
+          via: 'google',
+        },
+      });
+
+      return {
+        status: 'pending-approval' as const,
+        message: 'Institution registration submitted for platform review',
+        institution: {
+          id: institution._id.toString(),
+          name: institution.displayName,
+          status: institution.status,
+        },
+      };
+    }
+
+    await this.audit({
+      action: 'auth.account_created',
+      targetId: user._id.toString(),
+      targetType: 'user',
+      metadata: { accountType, email: user.email, via: 'google' },
+    });
+
+    return this.buildSessionResponse(userWithPersonalInfo);
+  }
+
+  private isCpfDuplicateError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: number }).code === 11000 &&
+      'keyPattern' in error &&
+      Boolean(
+        (error as { keyPattern?: Record<string, number> }).keyPattern?.cpf,
+      )
+    );
   }
 
   async refresh(refreshToken: string) {

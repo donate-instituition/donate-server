@@ -11,6 +11,8 @@ import {
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
+import { CompleteGoogleOnboardingDto } from './dto/complete-google-onboarding.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -37,6 +39,22 @@ export class AuthController {
   @Post('refresh')
   refresh(@Body() body: RefreshTokenDto) {
     return this.authService.refresh(body.refreshToken);
+  }
+
+  @Public()
+  @Post('google')
+  loginWithGoogle(@Body() googleLoginDto: GoogleLoginDto) {
+    return this.authService.loginWithGoogle(googleLoginDto);
+  }
+
+  @Public()
+  @Post('google/onboarding')
+  completeGoogleOnboarding(
+    @Body() completeGoogleOnboardingDto: CompleteGoogleOnboardingDto,
+  ) {
+    return this.authService.completeGoogleOnboarding(
+      completeGoogleOnboardingDto,
+    );
   }
 
   @Public()
