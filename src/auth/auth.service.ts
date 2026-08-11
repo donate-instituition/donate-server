@@ -33,7 +33,12 @@ import {
   Institution,
   InstitutionDocument,
 } from '../domains/institutions/schemas/institution.schema';
-import { UserRole, UserStatus, UserType } from '../domains/users/models';
+import {
+  UserRole,
+  UserStatus,
+  UserType,
+  type UserNotificationSettings,
+} from '../domains/users/models';
 import { UserDocument } from '../domains/users/schemas/user.schema';
 import { UsersService } from '../domains/users/users.service';
 import { AuditLogsService } from '../domains/audit-logs/audit-logs.service';
@@ -190,7 +195,10 @@ export class AuthService implements OnModuleInit {
     roles?: Array<
       string | { name: string; grantedAt?: Date; grantedBy?: unknown }
     >;
-    settings?: { preferredRole?: string };
+    settings?: {
+      preferredRole?: string;
+      notifications?: UserNotificationSettings;
+    };
     passwordChangeRequired?: boolean;
     termsAccepted?: boolean;
     acceptedTermsVersion?: string;
@@ -210,6 +218,7 @@ export class AuthService implements OnModuleInit {
       preferredRole: roles.some((role) => role.name === preferredRole)
         ? preferredRole
         : undefined,
+      notificationSettings: user.settings?.notifications,
       passwordChangeRequired: Boolean(user.passwordChangeRequired),
       termsAccepted: Boolean(user.termsAccepted),
       acceptedTermsVersion: user.acceptedTermsVersion,
@@ -1118,14 +1127,25 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Authentication token is missing');
     }
 
-    if (!body.preferredRole) {
-      throw new BadRequestException('Preferred role is required');
+    if (!body.preferredRole && !body.notifications) {
+      throw new BadRequestException(
+        'Preferred role or notifications is required',
+      );
     }
 
-    const updatedUser = await this.usersService.updatePreferredRole(
-      user.sub,
-      body.preferredRole,
-    );
+    let updatedUser = body.preferredRole
+      ? await this.usersService.updatePreferredRole(
+          user.sub,
+          body.preferredRole,
+        )
+      : null;
+
+    if (body.notifications) {
+      updatedUser = await this.usersService.updateNotificationSettings(
+        user.sub,
+        body.notifications,
+      );
+    }
 
     if (!updatedUser) {
       throw new UnauthorizedException('Authentication token is invalid');

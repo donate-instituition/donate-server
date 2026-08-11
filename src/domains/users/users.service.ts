@@ -36,7 +36,12 @@ import { CreateUserDto, type UserRoleGrantInput } from './dto/create-user.dto';
 import { RegisterPushTokenDto } from './dto/register-push-token.dto';
 import { UnregisterPushTokenDto } from './dto/unregister-push-token.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { UserRole, UserStatus, UserType } from './models';
+import {
+  UserRole,
+  UserStatus,
+  UserType,
+  type UserNotificationSettings,
+} from './models';
 import { User, UserDocument } from './schemas/user.schema';
 
 export type PublicUser = Omit<
@@ -548,6 +553,28 @@ export class UsersService implements OnModuleInit {
     user.settings = {
       ...user.settings,
       preferredRole,
+    };
+
+    await user.save();
+    return user;
+  }
+
+  async updateNotificationSettings(
+    id: string,
+    notifications: Partial<UserNotificationSettings>,
+  ) {
+    const user = await this.userModel.findById(id).exec();
+
+    if (!user) {
+      return null;
+    }
+
+    user.settings = {
+      ...user.settings,
+      notifications: {
+        ...user.settings?.notifications,
+        ...notifications,
+      },
     };
 
     await user.save();
