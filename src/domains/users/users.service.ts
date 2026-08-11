@@ -250,6 +250,8 @@ export class UsersService implements OnModuleInit {
       cpf: createUserDto.cpf,
       birthDate: createUserDto.birthDate,
       passwordHash: createUserDto.passwordHash,
+      googleId: createUserDto.googleId,
+      profilePhotoUrl: createUserDto.profilePhotoUrl,
       passwordChangeRequired: createUserDto.passwordChangeRequired ?? false,
       activationTokenVersion: createUserDto.activationTokenVersion,
       status: createUserDto.status ?? UserStatus.ACTIVE,
@@ -284,6 +286,10 @@ export class UsersService implements OnModuleInit {
 
   findByEmail(email: string) {
     return this.userModel.findOne({ email: email.trim().toLowerCase() }).exec();
+  }
+
+  findByGoogleId(googleId: string) {
+    return this.userModel.findOne({ googleId }).exec();
   }
 
   toPublicUser(user: UserDocument): PublicUser {

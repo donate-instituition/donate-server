@@ -17,6 +17,8 @@ export class UpdateUserDto {
 
   passwordHash?: string;
 
+  googleId?: string;
+
   passwordChangeRequired?: boolean;
 
   activationTokenVersion?: string | null;

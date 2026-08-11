@@ -108,6 +108,9 @@ export class User {
   @Prop({ required: true })
   passwordHash!: string;
 
+  @Prop({ unique: true, sparse: true, trim: true })
+  googleId?: string;
+
   @Prop({ required: true, default: false })
   passwordChangeRequired!: boolean;
 

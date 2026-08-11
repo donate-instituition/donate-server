@@ -28,6 +28,8 @@ export class CreateUserDto {
 
   passwordHash!: string;
 
+  googleId?: string;
+
   passwordChangeRequired?: boolean;
 
   activationTokenVersion?: string;
