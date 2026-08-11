@@ -39,6 +39,7 @@ import { TermsModule } from './domains/terms/terms.module';
 import { TrackingEventsModule } from './domains/tracking-events/tracking-events.module';
 import { UsersModule } from './domains/users/users.module';
 import { StorageModule } from './storage/storage.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { StorageModule } from './storage/storage.module';
     TaxReceiptsModule,
     TermsModule,
     TrackingEventsModule,
+    UploadsModule,
   ],
   controllers: [AppController],
   providers: [
