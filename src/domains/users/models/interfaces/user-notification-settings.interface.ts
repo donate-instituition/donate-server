@@ -1,4 +1,6 @@
 export interface UserNotificationSettings {
-  push?: boolean;
-  email?: boolean;
+  donations?: boolean;
+  campaigns?: boolean;
+  conversations?: boolean;
+  emailDigestEnabled?: boolean;
 }

@@ -206,18 +206,28 @@ export class User {
       },
       notifications: {
         type: {
-          push: {
+          donations: {
             type: Boolean,
             default: true,
           },
-          email: {
+          campaigns: {
             type: Boolean,
             default: true,
+          },
+          conversations: {
+            type: Boolean,
+            default: true,
+          },
+          emailDigestEnabled: {
+            type: Boolean,
+            default: false,
           },
         },
         default: {
-          push: true,
-          email: true,
+          donations: true,
+          campaigns: true,
+          conversations: true,
+          emailDigestEnabled: false,
         },
       },
     }),
@@ -225,8 +235,10 @@ export class User {
       privateProfile: false,
       allowMessagesFrom: UserAllowMessagesFrom.EVERYONE,
       notifications: {
-        push: true,
-        email: true,
+        donations: true,
+        campaigns: true,
+        conversations: true,
+        emailDigestEnabled: false,
       },
     },
   })
