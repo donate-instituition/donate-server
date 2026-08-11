@@ -883,4 +883,102 @@ describe('AuthService', () => {
       });
     });
   });
+
+  describe('updateMySettings', () => {
+    function authenticatedUser(userId: Types.ObjectId): AuthenticatedUser {
+      return {
+        sub: userId.toString(),
+        email: 'donor@example.com',
+        roles: [UserRole.DONOR],
+        type: UserType.PERSON,
+        status: UserStatus.ACTIVE,
+      };
+    }
+
+    it('rejects when neither preferredRole nor notifications is provided', async () => {
+      const authService = createAuthService({});
+
+      await expect(
+        authService.updateMySettings(
+          authenticatedUser(new Types.ObjectId()),
+          {},
+        ),
+      ).rejects.toThrow('Preferred role or notifications is required');
+    });
+
+    it('rejects when no authenticated user is present', async () => {
+      const authService = createAuthService({});
+
+      await expect(
+        authService.updateMySettings(undefined, {
+          preferredRole: UserRole.DONOR,
+        }),
+      ).rejects.toThrow('Authentication token is missing');
+    });
+
+    it('updates the preferred role when preferredRole is provided', async () => {
+      const userId = new Types.ObjectId();
+      const updatedUser = {
+        _id: userId,
+        email: 'donor@example.com',
+        fullName: 'Donor Example',
+        roles: [UserRole.DONOR],
+        settings: { preferredRole: UserRole.DONOR },
+      };
+      const usersService = {
+        updatePreferredRole: jest.fn().mockResolvedValue(updatedUser),
+        updateNotificationSettings: jest.fn(),
+      };
+      const authService = createAuthService({ usersService });
+
+      const response = await authService.updateMySettings(
+        authenticatedUser(userId),
+        { preferredRole: UserRole.DONOR },
+      );
+
+      expect(usersService.updatePreferredRole).toHaveBeenCalledWith(
+        userId.toString(),
+        UserRole.DONOR,
+      );
+      expect(usersService.updateNotificationSettings).not.toHaveBeenCalled();
+      expect(response.id).toBe(userId.toString());
+    });
+
+    it('updates notification settings when notifications is provided', async () => {
+      const userId = new Types.ObjectId();
+      const updatedUser = {
+        _id: userId,
+        email: 'donor@example.com',
+        fullName: 'Donor Example',
+        roles: [UserRole.DONOR],
+        settings: {
+          notifications: {
+            campaigns: true,
+            conversations: true,
+            donations: false,
+            emailDigestEnabled: false,
+          },
+        },
+      };
+      const usersService = {
+        updatePreferredRole: jest.fn(),
+        updateNotificationSettings: jest.fn().mockResolvedValue(updatedUser),
+      };
+      const authService = createAuthService({ usersService });
+
+      const response = await authService.updateMySettings(
+        authenticatedUser(userId),
+        { notifications: { donations: false } },
+      );
+
+      expect(usersService.updateNotificationSettings).toHaveBeenCalledWith(
+        userId.toString(),
+        { donations: false },
+      );
+      expect(usersService.updatePreferredRole).not.toHaveBeenCalled();
+      expect(response.notificationSettings).toEqual(
+        updatedUser.settings.notifications,
+      );
+    });
+  });
 });
