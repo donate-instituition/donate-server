@@ -10,7 +10,6 @@ import {
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { isAbsolute } from 'path';
 
 import { CreateTaxReceiptDto } from './dto/create-tax-receipt.dto';
 import { Public } from '../../auth/decorators/public.decorator';
@@ -38,15 +37,20 @@ export class TaxReceiptsController {
     @Query('token') token: string | undefined,
     @Res() response: Response,
   ) {
-    const downloadUrl = await this.taxReceiptsService.getPdfDownloadUrl(
-      id,
-      token,
+    const { body, contentLength, contentType, filename } =
+      await this.taxReceiptsService.getPdfObject(id, token);
+
+    response.setHeader('Content-Type', contentType);
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`,
     );
-    if (isAbsolute(downloadUrl)) {
-      return response.sendFile(downloadUrl);
+
+    if (contentLength) {
+      response.setHeader('Content-Length', String(contentLength));
     }
 
-    return response.redirect(downloadUrl);
+    body.pipe(response);
   }
 
   @Get(':id')

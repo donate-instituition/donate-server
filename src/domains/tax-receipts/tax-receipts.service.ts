@@ -18,7 +18,7 @@ import { TaxReceipt, TaxReceiptDocument } from './schemas/tax-receipt.schema';
 // receipt.generate queue) moved to donate-workers — it writes the same
 // `tax_receipts` collection this service reads. `createPdfDownloadPath`'s
 // token format must stay identical between the two repos: donate-workers
-// signs it, this service's getPdfDownloadUrl verifies it.
+// signs it, this service's getPdfObject verifies it.
 @Injectable()
 export class TaxReceiptsService {
   static createPdfDownloadPath(receiptId: string) {
@@ -66,7 +66,7 @@ export class TaxReceiptsService {
     return this.taxReceiptModel.findByIdAndDelete(id).exec();
   }
 
-  async getPdfDownloadUrl(id: string, token?: string) {
+  async getPdfObject(id: string, token?: string) {
     this.assertValidPdfDownloadToken(id, token);
     const receipt = await this.findOne(id);
     const objectKey = receipt.metadata?.storageObjectKey;
@@ -75,11 +75,16 @@ export class TaxReceiptsService {
       throw new NotFoundException('Tax receipt PDF not generated yet');
     }
 
-    return this.objectStorage.getSignedDownloadUrl({
-      contentType: receipt.metadata?.storageContentType ?? 'application/pdf',
+    const object = await this.objectStorage.getObjectStream(objectKey);
+
+    return {
+      ...object,
+      contentType:
+        object.contentType ??
+        receipt.metadata?.storageContentType ??
+        'application/pdf',
       filename: `${receipt.receiptNumber}.pdf`,
-      key: objectKey,
-    });
+    };
   }
 
   private assertValidPdfDownloadToken(receiptId: string, token?: string) {
