@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { randomUUID } from 'crypto';
 
 import { campaignCacheKey, CountersService, RedisService } from '../../cache';
 import {
@@ -16,7 +15,6 @@ import {
   shouldPaginate,
 } from '../../common/pagination';
 import { env } from '../../config/env';
-import { ObjectStorageService } from '../../storage/object-storage.service';
 import {
   InstitutionStaffMembershipRole,
   InstitutionStaffMembershipStatus,
@@ -50,7 +48,6 @@ import {
 import { Campaign, CampaignDocument } from './schemas/campaign.schema';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
-import { UploadCampaignAssetDto } from './dto/upload-campaign-asset.dto';
 
 @Injectable()
 export class CampaignsService {
@@ -73,7 +70,6 @@ export class CampaignsService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(InstitutionStaffMembership.name)
     private readonly institutionStaffMembershipModel: Model<InstitutionStaffMembershipDocument>,
-    private readonly objectStorageService: ObjectStorageService,
     private readonly redisService: RedisService,
     private readonly countersService: CountersService,
   ) {}
@@ -488,57 +484,6 @@ export class CampaignsService {
 
     await this.invalidateCampaignCache(id);
     return this.findOne(updatedCampaign?._id.toString() ?? id);
-  }
-
-  async uploadAsset(uploadCampaignAssetDto: UploadCampaignAssetDto) {
-    const contentType = uploadCampaignAssetDto.contentType
-      ?.trim()
-      .toLowerCase();
-
-    if (!['image/jpeg', 'image/jpg', 'image/png'].includes(contentType)) {
-      throw new BadRequestException('A imagem precisa ser JPG ou PNG.');
-    }
-
-    const body = Buffer.from(uploadCampaignAssetDto.base64, 'base64');
-    const maxSizeBytes = 5 * 1024 * 1024;
-
-    if (!body.byteLength || body.byteLength > maxSizeBytes) {
-      throw new BadRequestException('A imagem precisa ter até 5MB.');
-    }
-
-    const extension = contentType.includes('png') ? 'png' : 'jpg';
-    const fileName = `${randomUUID()}.${extension}`;
-    const key = `campaign-covers/${fileName}`;
-
-    const storedObject = await this.objectStorageService.putObject({
-      body,
-      contentDisposition: `inline; filename="${fileName}"`,
-      contentType,
-      key,
-    });
-
-    return {
-      contentType: storedObject.contentType,
-      fileName,
-      key: storedObject.key,
-      provider: storedObject.provider,
-      size: storedObject.size,
-      url: `/campaigns/uploads/${fileName}`,
-    };
-  }
-
-  getUploadedAssetUrl(fileName: string) {
-    if (!/^[a-f0-9-]+\.(jpg|png)$/i.test(fileName)) {
-      throw new NotFoundException('Arquivo não encontrado.');
-    }
-
-    const contentType = fileName.endsWith('.png') ? 'image/png' : 'image/jpeg';
-
-    return this.objectStorageService.getSignedDownloadUrl({
-      contentType,
-      filename: fileName,
-      key: `campaign-covers/${fileName}`,
-    });
   }
 
   async findAll(query: PaginationQuery = {}) {
