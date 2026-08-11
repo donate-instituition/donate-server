@@ -1,16 +1,25 @@
 import {
+  CopyObjectCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { promises as fs } from 'fs';
+import { createReadStream, promises as fs } from 'fs';
 import { dirname, join } from 'path';
+import type { Readable } from 'stream';
 
 import { env } from '../config/env';
 import type { PutObjectInput, StoredObject } from './object-storage.types';
+
+export type ObjectStream = {
+  body: Readable;
+  contentLength?: number;
+  contentType?: string;
+};
 
 @Injectable()
 export class ObjectStorageService {
@@ -53,6 +62,63 @@ export class ObjectStorageService {
       provider: 'local',
       size: input.body.byteLength,
     };
+  }
+
+  async moveObject(input: { fromKey: string; toKey: string }): Promise<void> {
+    if (env.objectStorageDriver === 's3') {
+      const bucket = this.getS3Bucket();
+
+      await this.getS3Client().send(
+        new CopyObjectCommand({
+          Bucket: bucket,
+          CopySource: `${bucket}/${input.fromKey}`,
+          Key: input.toKey,
+          ServerSideEncryption: 'AES256',
+        }),
+      );
+      await this.getS3Client().send(
+        new DeleteObjectCommand({ Bucket: bucket, Key: input.fromKey }),
+      );
+      return;
+    }
+
+    const fromPath = join(this.localStorageDir, input.fromKey);
+    const toPath = join(this.localStorageDir, input.toKey);
+    await fs.mkdir(dirname(toPath), { recursive: true });
+    await fs.rename(fromPath, toPath);
+  }
+
+  /**
+   * Reads object bytes through our own AWS credentials instead of handing
+   * out a presigned URL — callers that must never reveal the bucket
+   * domain to the client (e.g. tax receipt PDFs) pipe this stream through
+   * their own response rather than redirecting to S3.
+   */
+  async getObjectStream(key: string): Promise<ObjectStream> {
+    if (env.objectStorageDriver === 's3') {
+      const result = await this.getS3Client().send(
+        new GetObjectCommand({ Bucket: this.getS3Bucket(), Key: key }),
+      );
+
+      if (!result.Body) {
+        throw new NotFoundException('Object not found');
+      }
+
+      return {
+        body: result.Body as Readable,
+        contentLength: result.ContentLength,
+        contentType: result.ContentType,
+      };
+    }
+
+    const absolutePath = join(this.localStorageDir, key);
+    const stat = await fs.stat(absolutePath).catch(() => undefined);
+
+    if (!stat) {
+      throw new NotFoundException('Object not found');
+    }
+
+    return { body: createReadStream(absolutePath), contentLength: stat.size };
   }
 
   async getSignedDownloadUrl(input: {
