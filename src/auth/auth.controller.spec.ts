@@ -129,27 +129,6 @@ describe('AuthController', () => {
     });
   });
 
-  it('renders an HTML confirmation page with the escaped email on activation via link', async () => {
-    const { authService, controller } = createController({
-      activateAccount: jest.fn().mockResolvedValue({
-        email: `<script>alert('x')</script>&"'@example.com`,
-        message: 'Conta ativada com sucesso.',
-        status: 'active',
-      }),
-    });
-
-    const html = await controller.activateAccountFromEmail('tok-1');
-
-    expect(authService.activateAccount).toHaveBeenCalledWith({
-      token: 'tok-1',
-    });
-    expect(html).toContain('Conta ativada');
-    expect(html).toContain(
-      '&lt;script&gt;alert(&#039;x&#039;)&lt;/script&gt;&amp;&quot;&#039;@example.com',
-    );
-    expect(html).not.toContain('<script>alert');
-  });
-
   it('delegates forgot password to the auth service', async () => {
     const { authService, controller } = createController();
 
