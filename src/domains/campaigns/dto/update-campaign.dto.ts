@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 
 import {
+  CampaignCategory,
   CampaignDonationType,
   CampaignStatus,
   CampaignVisibility,
@@ -23,6 +24,8 @@ export class UpdateCampaignDto {
   description?: string;
 
   bannerUrl?: string;
+
+  category?: CampaignCategory;
 
   status?: CampaignStatus;
 

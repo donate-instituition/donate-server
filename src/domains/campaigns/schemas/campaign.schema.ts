@@ -2,6 +2,7 @@ import { Prop, raw, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 
 import {
+  CampaignCategory,
   CampaignDonationType,
   CampaignItemCategory,
   CampaignStatus,
@@ -39,6 +40,16 @@ export class Campaign {
 
   @Prop({ trim: true })
   bannerUrl?: string;
+
+  // Chosen explicitly by the institution at creation time — this is what
+  // the app's category filter chips match against. Older campaigns
+  // created before this field existed fall back to a legacy derivation
+  // from acceptedItems in CampaignsService.mapCategory.
+  @Prop({
+    enum: CampaignCategory,
+    type: String,
+  })
+  category?: CampaignCategory;
 
   @Prop({
     required: true,
