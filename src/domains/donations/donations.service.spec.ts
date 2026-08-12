@@ -15,9 +15,13 @@ describe('DonationsService', () => {
     }),
     find: jest.fn().mockReturnValue({
       sort: jest.fn().mockReturnValue({
-        lean: jest
-          .fn()
-          .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
+        skip: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            lean: jest
+              .fn()
+              .mockReturnValue({ exec: jest.fn().mockResolvedValue([]) }),
+          }),
+        }),
       }),
     }),
     findById: jest.fn().mockReturnValue({
@@ -59,6 +63,8 @@ describe('DonationsService', () => {
     }),
   };
 
+  const institutionStaffMembershipModel = {};
+
   const paymentModel = {
     findOne: jest.fn().mockReturnValue({
       sort: jest.fn().mockReturnValue({
@@ -94,6 +100,7 @@ describe('DonationsService', () => {
       donationModel as any,
       campaignModel as any,
       institutionModel as any,
+      institutionStaffMembershipModel as any,
       paymentModel as any,
       taxReceiptModel as any,
     );
@@ -108,6 +115,7 @@ describe('DonationsService', () => {
       donationModel as any,
       campaignModel as any,
       institutionModel as any,
+      institutionStaffMembershipModel as any,
       paymentModel as any,
       taxReceiptModel as any,
     );
