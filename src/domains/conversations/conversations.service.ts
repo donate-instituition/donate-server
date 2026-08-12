@@ -120,16 +120,21 @@ export class ConversationsService {
     );
   }
 
-  private async getInstitutionName(institutionId?: Types.ObjectId) {
+  private async getInstitutionIdentity(institutionId?: Types.ObjectId) {
     if (!institutionId) return undefined;
 
     const institution = await this.institutionModel
       .findById(institutionId)
-      .select('displayName legalName')
+      .select('displayName legalName logoUrl')
       .lean()
       .exec();
 
-    return institution?.displayName ?? institution?.legalName;
+    if (!institution) return undefined;
+
+    return {
+      name: institution.displayName ?? institution.legalName,
+      photoUrl: institution.logoUrl,
+    };
   }
 
   private async isInstitutionStaffParticipant(
@@ -151,13 +156,15 @@ export class ConversationsService {
     return Boolean(membership);
   }
 
-  private async getCounterpartName(
+  private async getCounterpartIdentity(
     conversation: ConversationRecord,
     currentUserId: Types.ObjectId,
-    institutionName: string,
+    institutionIdentity?: { name: string; photoUrl?: string },
   ) {
+    const institutionName = institutionIdentity?.name ?? 'Instituição';
+
     if (conversation.subjectKey === SUPPORT_SUBJECT_KEY) {
-      return SUPPORT_TITLE;
+      return { name: SUPPORT_TITLE, photoUrl: undefined };
     }
 
     const isCurrentUserStaff = await this.isInstitutionStaffParticipant(
@@ -166,7 +173,7 @@ export class ConversationsService {
     );
 
     if (!isCurrentUserStaff) {
-      return institutionName;
+      return { name: institutionName, photoUrl: institutionIdentity?.photoUrl };
     }
 
     const staffMemberships = conversation.institutionId
@@ -182,22 +189,27 @@ export class ConversationsService {
     const staffUserIds = new Set(
       staffMemberships.map((membership) => membership.userId.toString()),
     );
-    const counterpartUserId = conversation.participantIds.find((participantId) => {
-      const id = participantId.toString();
-      return id !== currentUserId.toString() && !staffUserIds.has(id);
-    });
+    const counterpartUserId = conversation.participantIds.find(
+      (participantId) => {
+        const id = participantId.toString();
+        return id !== currentUserId.toString() && !staffUserIds.has(id);
+      },
+    );
 
     if (!counterpartUserId) {
-      return institutionName;
+      return { name: institutionName, photoUrl: institutionIdentity?.photoUrl };
     }
 
     const counterpart = await this.userModel
       .findById(counterpartUserId)
-      .select('fullName email')
+      .select('fullName email profilePhotoUrl')
       .lean()
       .exec();
 
-    return counterpart?.fullName ?? counterpart?.email ?? institutionName;
+    return {
+      name: counterpart?.fullName ?? counterpart?.email ?? institutionName,
+      photoUrl: counterpart?.profilePhotoUrl,
+    };
   }
 
   private async toConversationResponse(
@@ -215,14 +227,15 @@ export class ConversationsService {
         'readBy.userId': { $ne: currentUserId },
       })
       .exec();
+    const institutionIdentity = await this.getInstitutionIdentity(
+      conversation.institutionId,
+    );
     const institutionName =
-      conversation.title ??
-      (await this.getInstitutionName(conversation.institutionId)) ??
-      'Instituição';
-    const displayName = await this.getCounterpartName(
+      conversation.title ?? institutionIdentity?.name ?? 'Instituição';
+    const counterpart = await this.getCounterpartIdentity(
       conversation,
       currentUserId,
-      institutionName,
+      { name: institutionName, photoUrl: institutionIdentity?.photoUrl },
     );
 
     return {
@@ -232,9 +245,10 @@ export class ConversationsService {
           ? SUPPORT_SUBJECT_KEY
           : conversation.institutionId?.toString(),
       campaignId: conversation.campaignId?.toString(),
-      counterpartName: displayName,
-      displayName,
+      counterpartName: counterpart.name,
+      displayName: counterpart.name,
       institutionName,
+      photoUrl: counterpart.photoUrl,
       lastMessage: lastMessage?.content ?? '',
       lastMessageAt:
         lastMessage?.createdAt?.toISOString?.() ??
