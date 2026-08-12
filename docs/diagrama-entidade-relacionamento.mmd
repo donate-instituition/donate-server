@@ -2,17 +2,24 @@ erDiagram
   USERS {
     ObjectId _id_PK
     string type
-    string role
+    objectArray roles
     string fullName
     string email_UK
     string phone
     string cpf
     string passwordHash
+    string googleId_UK
+    boolean passwordChangeRequired
+    string activationTokenVersion
     date birthDate
     string profilePhotoUrl
     string bio
+    objectArray pushTokens
     string status
     boolean isVerified
+    boolean termsAccepted
+    string acceptedTermsVersion
+    date termsAcceptedAt
     object settings
     object stats
     date createdAt
@@ -36,6 +43,9 @@ erDiagram
     object address
     stringArray acceptedDonationTypes
     string pixKey
+    string stripeConnectAccountId
+    object stripeConnect
+    boolean acceptsRecurringDonations
     boolean taxReceiptEnabled
     object stats
     date createdAt
@@ -70,6 +80,7 @@ erDiagram
     string title
     string description
     string bannerUrl
+    string category
     string status
     stringArray donationTypes
     objectArray acceptedItems
@@ -127,7 +138,10 @@ erDiagram
   DELIVERY_PROOFS {
     ObjectId _id_PK
     ObjectId donationId_FK
+    ObjectId campaignId_FK
     string photoUrl
+    string fileName
+    string contentType
     string description
     ObjectId confirmedByUserId_FK
     date confirmedAt
@@ -209,6 +223,8 @@ erDiagram
     ObjectIdArray participantIds_FK
     ObjectId institutionId_FK
     ObjectId campaignId_FK
+    string subjectKey
+    string title
     date lastMessageAt
     date createdAt
     date updatedAt
@@ -271,6 +287,93 @@ erDiagram
     date createdAt
   }
 
+  CAMPAIGN_COMMENTS {
+    ObjectId _id_PK
+    ObjectId campaignId_FK
+    ObjectId userId_FK
+    string content
+    date createdAt
+    date updatedAt
+  }
+
+  CAMPAIGN_REACTIONS {
+    ObjectId _id_PK
+    ObjectId campaignId_FK
+    ObjectId userId_FK
+    string type
+    date createdAt
+  }
+
+  APP_SETTINGS {
+    ObjectId _id_PK
+    string key_UK
+    string valueType
+    object value
+    string description
+    boolean isSecret
+    date createdAt
+    date updatedAt
+  }
+
+  ERROR_LOGS {
+    ObjectId _id_PK
+    string requestId_UK
+    string serviceName
+    string serviceVersion
+    int statusCode
+    string errorName
+    string errorCode
+    string message
+    string httpMethod
+    string path
+    string controllerMethod
+    string sourceFile
+    int sourceLine
+    int sourceColumn
+    ObjectId userId_FK
+    string ip
+    string userAgent
+    object request
+    stringArray stack
+    object kafka
+    date createdAt
+  }
+
+  SUPPORT_FAQS {
+    ObjectId _id_PK
+    string title
+    string version_UK
+    objectArray items
+    boolean isCurrent
+    date publishedAt
+    date createdAt
+    date updatedAt
+  }
+
+  TERMS {
+    ObjectId _id_PK
+    string title
+    string version_UK
+    string content
+    boolean isCurrent
+    date publishedAt
+    date createdAt
+    date updatedAt
+  }
+
+  STRIPE_WEBHOOK_EVENTS {
+    ObjectId _id_PK
+    string eventId_UK
+    string type
+    string status
+    object payload
+    boolean livemode
+    string lastError
+    date processedAt
+    date createdAt
+    date updatedAt
+  }
+
   USERS ||--o{ INSTITUTION_STAFF_MEMBERSHIPS : userId_FK_to_users_PK
   USERS ||--o{ INSTITUTION_STAFF_MEMBERSHIPS : invitedByUserId_FK_to_users_PK
   INSTITUTIONS ||--o{ INSTITUTION_STAFF_MEMBERSHIPS : institutionId_FK_to_institutions_PK
@@ -288,6 +391,7 @@ erDiagram
   INSTITUTIONS ||--o{ PAYMENTS : institutionId_FK_to_institutions_PK
 
   DONATIONS ||--o{ DELIVERY_PROOFS : donationId_FK_to_donations_PK
+  CAMPAIGNS ||--o{ DELIVERY_PROOFS : campaignId_FK_to_campaigns_PK
   USERS ||--o{ DELIVERY_PROOFS : confirmedByUserId_FK_to_users_PK
 
   DONATIONS ||--o{ TAX_RECEIPTS : donationId_FK_to_donations_PK
@@ -321,7 +425,20 @@ erDiagram
   USERS ||--o{ FOLLOWS : followerUserId_FK_to_users_PK
   INSTITUTIONS ||--o{ FOLLOWS : targetId_FK_to_institutions_PK
   CAMPAIGNS ||--o{ FOLLOWS : targetId_FK_to_campaigns_PK
+  USERS ||--o{ FOLLOWS : targetId_FK_to_users_PK
 
   USERS ||--o{ REPORTS : reporterUserId_FK_to_users_PK
   USERS ||--o{ REPORTS : reviewedByUserId_FK_to_users_PK
+  USERS ||--o{ REPORTS : targetId_FK_to_users_PK
+  INSTITUTIONS ||--o{ REPORTS : targetId_FK_to_institutions_PK
+  CAMPAIGNS ||--o{ REPORTS : targetId_FK_to_campaigns_PK
+  POSTS ||--o{ REPORTS : targetId_FK_to_posts_PK
+  MESSAGES ||--o{ REPORTS : targetId_FK_to_messages_PK
   USERS ||--o{ AUDIT_LOGS : actorUserId_FK_to_users_PK
+
+  CAMPAIGNS ||--o{ CAMPAIGN_COMMENTS : campaignId_FK_to_campaigns_PK
+  USERS ||--o{ CAMPAIGN_COMMENTS : userId_FK_to_users_PK
+  CAMPAIGNS ||--o{ CAMPAIGN_REACTIONS : campaignId_FK_to_campaigns_PK
+  USERS ||--o{ CAMPAIGN_REACTIONS : userId_FK_to_users_PK
+
+  USERS ||--o{ ERROR_LOGS : userId_FK_to_users_PK

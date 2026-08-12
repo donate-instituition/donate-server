@@ -69,12 +69,19 @@ Representa pessoas que utilizam a plataforma. Pode corresponder a:
   - valores possíveis:
     - `PERSON`
 
-- `role`: enum — papel do usuário na plataforma  
+- `roles`: object[] — lista de papéis atribuídos ao usuário na plataforma (um usuário pode acumular múltiplos papéis simultaneamente)  
   - obrigatório: sim
-  - valores possíveis:
-    - `PLATFORM_ADMIN` — administrador da plataforma
-    - `DONOR` — usuário padrão doador
-    - `INSTITUTION_STAFF` — funcionário de instituição
+  - estrutura de cada item:
+    - `name`: enum — obrigatório
+      - `PLATFORM_ADMIN` — administrador da plataforma
+      - `DONOR` — usuário padrão doador
+      - `INSTITUTION_STAFF` — funcionário de instituição
+    - `grantedAt`: date — obrigatório — data em que o papel foi concedido
+    - `grantedBy`: object — obrigatório — origem da concessão do papel
+      - `source`: enum — obrigatório — `SYSTEM` ou `USER`
+      - `label`: string — obrigatório — rótulo legível da origem (ex.: "sistema")
+      - `userId`: ObjectId — opcional — usuário que concedeu o papel, quando `source = USER`
+  - observação: por padrão, todo novo usuário recebe o papel `DONOR` concedido pelo `SYSTEM`
 
 - `fullName`: string — nome completo  
   - obrigatório: sim
@@ -92,6 +99,15 @@ Representa pessoas que utilizam a plataforma. Pode corresponder a:
 - `passwordHash`: string — hash da senha  
   - obrigatório: sim
 
+- `googleId`: string — identificador da conta Google vinculada (login social)  
+  - obrigatório: não
+
+- `passwordChangeRequired`: boolean — indica se o usuário deve trocar a senha no próximo login  
+  - obrigatório: sim
+
+- `activationTokenVersion`: string — versão do token de ativação/verificação de conta em uso  
+  - obrigatório: não
+
 - `birthDate`: date — data de nascimento  
   - obrigatório: não
 
@@ -100,6 +116,20 @@ Representa pessoas que utilizam a plataforma. Pode corresponder a:
 
 - `bio`: string — descrição curta do perfil  
   - obrigatório: não
+
+- `pushTokens`: object[] — tokens de dispositivo para envio de notificações push  
+  - obrigatório: não
+  - estrutura de cada item:
+    - `token`: string — obrigatório
+    - `platform`: enum — obrigatório
+      - `android`
+      - `ios`
+      - `web`
+      - `unknown`
+    - `deviceId`: string — opcional
+    - `appVersion`: string — opcional
+    - `lastSeenAt`: date — obrigatório
+    - `disabledAt`: date — opcional
 
 - `status`: enum — situação da conta  
   - obrigatório: sim
@@ -112,6 +142,15 @@ Representa pessoas que utilizam a plataforma. Pode corresponder a:
 - `isVerified`: boolean — indica se a conta foi verificada  
   - obrigatório: sim
 
+- `termsAccepted`: boolean — indica se o usuário aceitou os termos de uso  
+  - obrigatório: sim
+
+- `acceptedTermsVersion`: string — versão dos termos de uso aceita pelo usuário  
+  - obrigatório: não
+
+- `termsAcceptedAt`: date — data de aceite dos termos de uso  
+  - obrigatório: não
+
 - `settings`: object — preferências do usuário  
   - obrigatório: não
   - estrutura:
@@ -120,9 +159,15 @@ Representa pessoas que utilizam a plataforma. Pode corresponder a:
       - `EVERYONE`
       - `FOLLOWING`
       - `NONE`
+    - `preferredRole`: enum — papel preferido do usuário para exibição/contexto padrão da interface
+      - `PLATFORM_ADMIN`
+      - `DONOR`
+      - `INSTITUTION_STAFF`
     - `notifications`: object — preferências de notificação
-      - `push`: boolean — ativa notificações push
-      - `email`: boolean — ativa notificações por e-mail
+      - `donations`: boolean — notificações sobre doações
+      - `campaigns`: boolean — notificações sobre campanhas
+      - `conversations`: boolean — notificações sobre conversas/mensagens
+      - `emailDigestEnabled`: boolean — ativa resumo periódico por e-mail
 
 - `stats`: object — métricas agregadas do usuário  
   - obrigatório: não
@@ -131,6 +176,8 @@ Representa pessoas que utilizam a plataforma. Pode corresponder a:
     - `totalDonationsCount`: int — quantidade de doações realizadas
     - `followingInstitutionsCount`: int — quantidade de instituições seguidas
     - `followingCampaignsCount`: int — quantidade de campanhas seguidas
+    - `followingUsersCount`: int — quantidade de usuários seguidos
+    - `followersCount`: int — quantidade de seguidores
 
 - `createdAt`: date — data de criação  
   - obrigatório: sim
@@ -148,7 +195,11 @@ Representa pessoas que utilizam a plataforma. Pode corresponder a:
 - `USERS 1:N AUDIT_LOGS` pelo campo `actorUserId`
 - `USERS 1:N POST_COMMENTS`
 - `USERS 1:N POST_REACTIONS`
+- `USERS 1:N CAMPAIGN_COMMENTS`
+- `USERS 1:N CAMPAIGN_REACTIONS`
 - `USERS 1:N FOLLOWS` pelo campo `followerUserId`
+- `USERS 1:N ERROR_LOGS` pelo campo `userId`
+- `USERS N:1 USERS` pelo campo `roles[].grantedBy.userId` (auto-relacionamento — usuário que concedeu um papel a outro)
 
 ---
 
@@ -235,6 +286,28 @@ Representa as instituições que recebem doações e publicam campanhas.
 - `pixKey`: string — chave PIX  
   - obrigatório: não
 
+- `stripeConnectAccountId`: string — identificador da conta Stripe Connect da instituição  
+  - obrigatório: não
+
+- `stripeConnect`: object — status detalhado da integração com o Stripe Connect  
+  - obrigatório: não
+  - estrutura:
+    - `accountId`: string
+    - `chargesEnabled`: boolean
+    - `country`: string
+    - `defaultCurrency`: string
+    - `detailsSubmitted`: boolean
+    - `exists`: boolean
+    - `livemode`: boolean
+    - `payoutsEnabled`: boolean
+    - `ready`: boolean
+    - `requirementsCurrentlyDue`: string[]
+    - `requirementsDisabledReason`: string
+    - `verifiedAt`: date
+
+- `acceptsRecurringDonations`: boolean — indica se a instituição aceita doações recorrentes  
+  - obrigatório: sim
+
 - `taxReceiptEnabled`: boolean — indica se a instituição pode emitir comprovantes  
   - obrigatório: sim
 
@@ -245,6 +318,7 @@ Representa as instituições que recebem doações e publicam campanhas.
     - `campaignsCount`: int
     - `receivedDonationsCount`: int
     - `receivedAmount`: number
+    - `postsCount`: int
 
 - `createdAt`: date — data de criação  
   - obrigatório: sim
@@ -259,6 +333,7 @@ Representa as instituições que recebem doações e publicam campanhas.
 - `INSTITUTIONS 1:N PAYMENTS`
 - `INSTITUTIONS 1:N TAX_RECEIPTS`
 - `INSTITUTIONS 1:N POSTS` quando `authorType = INSTITUTION`
+- `INSTITUTIONS 1:N CONVERSATIONS`
 
 ---
 
@@ -347,10 +422,22 @@ Representa campanhas de arrecadação criadas por instituições.
 - `bannerUrl`: string — imagem principal da campanha  
   - obrigatório: não
 
+- `category`: enum — categoria escolhida explicitamente pela instituição na criação da campanha, usada nos filtros do app  
+  - obrigatório: não
+  - valores possíveis:
+    - `EDUCATION` (`"Educação"`)
+    - `FOOD` (`"Alimentação"`)
+    - `HEALTH` (`"Saúde"`)
+    - `HOUSING` (`"Moradia"`)
+    - `ENVIRONMENT` (`"Meio Ambiente"`)
+    - `OTHER` (`"Outros"`)
+  - observação: campanhas antigas criadas antes deste campo existir recorrem a uma derivação legada a partir de `acceptedItems`
+
 - `status`: enum — status da campanha  
   - obrigatório: sim
   - valores possíveis:
     - `DRAFT`
+    - `IN_REVIEW`
     - `PUBLISHED`
     - `PAUSED`
     - `FINISHED`
@@ -410,6 +497,9 @@ Representa campanhas de arrecadação criadas por instituições.
     - `state`: string
     - `zipCode`: string
     - `country`: string
+    - `location`: object
+      - `type`: string — normalmente `Point`
+      - `coordinates`: number[] — longitude e latitude
 
 - `tags`: string[] — palavras-chave  
   - obrigatório: não
@@ -418,6 +508,9 @@ Representa campanhas de arrecadação criadas por instituições.
   - obrigatório: não
   - estrutura:
     - `followersCount`: int
+    - `likesCount`: int
+    - `commentsCount`: int
+    - `sharesCount`: int
     - `donationsCount`: int
     - `postsCount`: int
 
@@ -432,6 +525,10 @@ Representa campanhas de arrecadação criadas por instituições.
 - `CAMPAIGNS N:1 USERS` pelo campo `createdByUserId`
 - `CAMPAIGNS 1:N DONATIONS`
 - `CAMPAIGNS 1:N POSTS`
+- `CAMPAIGNS 1:N CAMPAIGN_COMMENTS`
+- `CAMPAIGNS 1:N CAMPAIGN_REACTIONS`
+- `CAMPAIGNS 1:N CONVERSATIONS`
+- `CAMPAIGNS 1:N DELIVERY_PROOFS`
 
 ---
 
@@ -762,10 +859,21 @@ Representa a comprovação formal da entrega da doação.
   - obrigatório: sim
 
 - `donationId`: ObjectId — referência da doação  
-  - obrigatório: sim
+  - obrigatório: não
+  - observação: pode ser omitido quando a prova está associada diretamente a uma campanha
+
+- `campaignId`: ObjectId — referência da campanha  
+  - obrigatório: não
+  - observação: pode ser omitido quando a prova está associada diretamente a uma doação
 
 - `photoUrl`: string — URL da foto de comprovação  
   - obrigatório: sim
+
+- `fileName`: string — nome do arquivo original  
+  - obrigatório: não
+
+- `contentType`: string — tipo de conteúdo (MIME type) do arquivo  
+  - obrigatório: não
 
 - `description`: string — descrição da entrega  
   - obrigatório: não
@@ -788,6 +896,7 @@ Representa a comprovação formal da entrega da doação.
 
 ### Relacionamentos
 - `DELIVERY_PROOFS N:1 DONATIONS`
+- `DELIVERY_PROOFS N:1 CAMPAIGNS`
 - `DELIVERY_PROOFS N:1 USERS` pelo campo `confirmedByUserId`
 
 ---
@@ -836,9 +945,20 @@ Representa comprovantes de doação emitidos para consulta e fins fiscais.
   - estrutura:
     - `donorCpfMasked`: string — CPF mascarado
     - `institutionCnpj`: string — CNPJ da instituição
-
-- `year`: int — ano de referência  
-  - obrigatório: sim
+    - `campaignTitle`: string — título da campanha associada, se houver
+    - `donationKind`: string — natureza da doação (dinheiro/item)
+    - `grossAmount`: number — valor bruto
+    - `netAmount`: number — valor líquido
+    - `paymentId`: string — identificador do pagamento associado
+    - `serviceFeeAmount`: number — valor da taxa de serviço
+    - `serviceFeeBps`: number — taxa de serviço em pontos-base
+    - `storageBucket`: string — bucket de armazenamento do documento
+    - `storageChecksum`: string — checksum do arquivo armazenado
+    - `storageContentType`: string — tipo de conteúdo do arquivo armazenado
+    - `storageObjectKey`: string — chave do objeto no armazenamento
+    - `storageProvider`: string — provedor de armazenamento
+    - `storageSize`: number — tamanho do arquivo armazenado
+    - `year`: int — ano de referência do comprovante
 
 - `createdAt`: date — data de criação  
   - obrigatório: sim
@@ -1052,6 +1172,12 @@ Representa conversas no módulo de chat.
 - `campaignId`: ObjectId — referência de campanha  
   - obrigatório: não
 
+- `subjectKey`: string — chave de assunto usada para agrupar/identificar conversas de um mesmo contexto  
+  - obrigatório: não
+
+- `title`: string — título da conversa (usado principalmente em grupos)  
+  - obrigatório: não
+
 - `lastMessageAt`: date — data da última mensagem  
   - obrigatório: não
 
@@ -1063,6 +1189,9 @@ Representa conversas no módulo de chat.
 
 ### Relacionamentos
 - `CONVERSATIONS 1:N MESSAGES`
+- `CONVERSATIONS N:1 INSTITUTIONS`
+- `CONVERSATIONS N:1 CAMPAIGNS`
+- `CONVERSATIONS N:N USERS` pelo campo `participantIds`
 
 ---
 
@@ -1145,6 +1274,7 @@ Representa notificações enviadas aos usuários.
     - `NEW_FOLLOWER`
     - `NEW_MESSAGE`
     - `CAMPAIGN_UPDATE`
+    - `CAMPAIGN_GOAL_REACHED`
 
 - `title`: string — título  
   - obrigatório: sim
@@ -1321,6 +1451,340 @@ Representa categorias usadas para instituições e itens de doação.
 
 ---
 
+## 3.21. CAMPAIGN_COMMENTS
+
+### Descrição
+Representa comentários realizados diretamente em campanhas — distintos dos comentários feitos em posts do feed (`POST_COMMENTS`).
+
+### Collection
+`campaign_comments`
+
+### Campos
+- `_id`: ObjectId — identificador único do comentário  
+  - obrigatório: sim
+
+- `campaignId`: ObjectId — referência da campanha  
+  - obrigatório: sim
+
+- `userId`: ObjectId — referência do autor do comentário  
+  - obrigatório: sim
+
+- `content`: string — conteúdo textual  
+  - obrigatório: sim
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
+
+### Relacionamentos
+- `CAMPAIGN_COMMENTS N:1 CAMPAIGNS`
+- `CAMPAIGN_COMMENTS N:1 USERS`
+
+---
+
+## 3.22. CAMPAIGN_REACTIONS
+
+### Descrição
+Representa curtidas/reações realizadas diretamente em campanhas — distintas das reações feitas em posts do feed (`POST_REACTIONS`).
+
+### Collection
+`campaign_reactions`
+
+### Campos
+- `_id`: ObjectId — identificador único da reação  
+  - obrigatório: sim
+
+- `campaignId`: ObjectId — referência da campanha  
+  - obrigatório: sim
+
+- `userId`: ObjectId — referência do usuário  
+  - obrigatório: sim
+
+- `type`: enum — tipo de reação  
+  - obrigatório: sim
+  - valores possíveis:
+    - `LIKE`
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- observação: há índice único composto em (`campaignId`, `userId`), impedindo mais de uma reação do mesmo usuário na mesma campanha
+
+### Relacionamentos
+- `CAMPAIGN_REACTIONS N:1 CAMPAIGNS`
+- `CAMPAIGN_REACTIONS N:1 USERS`
+
+---
+
+## 3.23. APP_SETTINGS
+
+### Descrição
+Representa configurações dinâmicas da plataforma, editáveis em tempo de execução sem necessidade de novo deploy.
+
+### Collection
+`app_settings`
+
+### Campos
+- `_id`: ObjectId — identificador único da configuração  
+  - obrigatório: sim
+
+- `key`: string — chave única da configuração  
+  - obrigatório: sim
+
+- `valueType`: enum — tipo do valor armazenado em `value`  
+  - obrigatório: sim
+  - valores possíveis:
+    - `BOOLEAN`
+    - `JSON`
+    - `NUMBER`
+    - `STRING`
+
+- `value`: object — valor da configuração, com formato dependente de `valueType`  
+  - obrigatório: não
+
+- `description`: string — descrição da configuração  
+  - obrigatório: não
+
+- `isSecret`: boolean — indica se o valor deve ser tratado como sensível/mascarado  
+  - obrigatório: sim
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
+
+- observação: há índice único no campo `key`
+
+### Relacionamentos
+- entidade independente, sem referências a outras collections
+
+---
+
+## 3.24. ERROR_LOGS
+
+### Descrição
+Registra erros ocorridos durante o processamento de requisições da API, para fins de observabilidade e diagnóstico.
+
+### Collection
+`error_logs`
+
+### Campos
+- `_id`: ObjectId — identificador único do log  
+  - obrigatório: sim
+
+- `requestId`: string — identificador único da requisição  
+  - obrigatório: sim
+
+- `serviceName`: string — nome do serviço que gerou o erro  
+  - obrigatório: sim
+
+- `serviceVersion`: string — versão do serviço  
+  - obrigatório: sim
+
+- `statusCode`: int — código HTTP retornado  
+  - obrigatório: sim
+
+- `errorName`: string — nome/classe do erro  
+  - obrigatório: sim
+
+- `errorCode`: string — código interno do erro  
+  - obrigatório: não
+
+- `message`: string — mensagem do erro  
+  - obrigatório: sim
+
+- `httpMethod`: string — método HTTP da requisição  
+  - obrigatório: sim
+
+- `path`: string — caminho da requisição  
+  - obrigatório: sim
+
+- `controllerMethod`: string — método do controller responsável pela rota  
+  - obrigatório: não
+
+- `sourceFile`: string — arquivo de origem do erro  
+  - obrigatório: não
+
+- `sourceLine`: int — linha de origem do erro  
+  - obrigatório: não
+
+- `sourceColumn`: int — coluna de origem do erro  
+  - obrigatório: não
+
+- `userId`: ObjectId — usuário autenticado na requisição, quando houver  
+  - obrigatório: não
+
+- `ip`: string — endereço IP da requisição  
+  - obrigatório: não
+
+- `userAgent`: string — identificador do cliente  
+  - obrigatório: não
+
+- `request`: object — dados da requisição que originou o erro  
+  - obrigatório: não
+  - estrutura:
+    - `params`: object
+    - `query`: object
+    - `body`: object
+
+- `stack`: string[] — linhas do stack trace  
+  - obrigatório: não
+
+- `kafka`: object — status de enfileiramento do log para processamento assíncrono  
+  - obrigatório: não
+  - estrutura:
+    - `queued`: boolean
+    - `topic`: string
+    - `queuedAt`: date
+
+- `createdAt`: date — data do registro  
+  - obrigatório: sim
+
+- observação: há índice único em `requestId`, além de índices em `createdAt` e em (`statusCode`, `createdAt`)
+
+### Relacionamentos
+- `ERROR_LOGS N:1 USERS` pelo campo `userId`
+
+---
+
+## 3.25. SUPPORT_FAQS
+
+### Descrição
+Representa versões publicadas do conjunto de perguntas frequentes (FAQ) de suporte da plataforma.
+
+### Collection
+`support_faqs`
+
+### Campos
+- `_id`: ObjectId — identificador único da versão de FAQ  
+  - obrigatório: sim
+
+- `title`: string — título do conjunto de perguntas  
+  - obrigatório: sim
+
+- `version`: string — versão única do conjunto de perguntas  
+  - obrigatório: sim
+
+- `items`: object[] — lista de perguntas e respostas  
+  - obrigatório: sim
+  - estrutura de cada item:
+    - `question`: string — obrigatório
+    - `answer`: string — obrigatório
+    - `order`: int — obrigatório — posição de exibição
+
+- `isCurrent`: boolean — indica se é a versão vigente  
+  - obrigatório: sim
+
+- `publishedAt`: date — data de publicação  
+  - obrigatório: não
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
+
+- observação: há índice em `isCurrent` para consulta rápida da versão vigente
+
+### Relacionamentos
+- entidade independente, sem referências a outras collections
+
+---
+
+## 3.26. TERMS
+
+### Descrição
+Representa versões dos termos de uso/serviço da plataforma.
+
+### Collection
+`terms`
+
+### Campos
+- `_id`: ObjectId — identificador único da versão do termo  
+  - obrigatório: sim
+
+- `title`: string — título do termo  
+  - obrigatório: sim
+
+- `version`: string — versão única do termo  
+  - obrigatório: sim
+
+- `content`: string — conteúdo integral do termo  
+  - obrigatório: sim
+
+- `isCurrent`: boolean — indica se é a versão vigente  
+  - obrigatório: sim
+
+- `publishedAt`: date — data de publicação  
+  - obrigatório: não
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
+
+- observação: há índice em `isCurrent`
+
+### Relacionamentos
+- `TERMS 1:N USERS` — relacionamento conceitual via `users.acceptedTermsVersion`, sem `ref` fixo no schema
+
+---
+
+## 3.27. STRIPE_WEBHOOK_EVENTS
+
+### Descrição
+Registra eventos recebidos via webhook do Stripe, para processamento assíncrono e garantia de idempotência. Faz parte do domínio `payments`.
+
+### Collection
+`stripe_webhook_events`
+
+### Campos
+- `_id`: ObjectId — identificador único do evento  
+  - obrigatório: sim
+
+- `eventId`: string — identificador único do evento no Stripe  
+  - obrigatório: sim
+
+- `type`: string — tipo do evento Stripe  
+  - obrigatório: sim
+
+- `status`: enum — status de processamento do evento  
+  - obrigatório: sim
+  - valores possíveis:
+    - `QUEUED`
+    - `PROCESSING`
+    - `PROCESSED`
+    - `FAILED`
+
+- `payload`: object — corpo bruto do evento recebido  
+  - obrigatório: sim
+
+- `livemode`: boolean — indica se o evento veio do ambiente de produção do Stripe  
+  - obrigatório: sim
+
+- `lastError`: string — última mensagem de erro no processamento  
+  - obrigatório: não
+
+- `processedAt`: date — data de conclusão do processamento  
+  - obrigatório: não
+
+- `createdAt`: date — data de criação  
+  - obrigatório: sim
+
+- `updatedAt`: date — data da última atualização  
+  - obrigatório: sim
+
+- observação: há índice único em `eventId`
+
+### Relacionamentos
+- entidade independente (sem `ref` direto); relaciona-se conceitualmente com `PAYMENTS` pelo conteúdo do `payload`
+
+---
+
 # 4. Resumo geral dos relacionamentos
 
 ```text
@@ -1338,6 +1802,7 @@ DONATIONS 1:N DONATION_STATUS_HISTORY
 DONATIONS 1:N PAYMENTS
 DONATIONS 1:N TRACKING_EVENTS
 DONATIONS 1:N DELIVERY_PROOFS
+CAMPAIGNS 1:N DELIVERY_PROOFS
 DONATIONS 1:N TAX_RECEIPTS
 
 USERS 1:N FOLLOWS
@@ -1352,12 +1817,26 @@ CAMPAIGNS 1:N POSTS
 POSTS 1:N POST_COMMENTS
 POSTS 1:N POST_REACTIONS
 
+CAMPAIGNS 1:N CAMPAIGN_COMMENTS
+USERS 1:N CAMPAIGN_COMMENTS
+CAMPAIGNS 1:N CAMPAIGN_REACTIONS
+USERS 1:N CAMPAIGN_REACTIONS
+
 CONVERSATIONS 1:N MESSAGES
 USERS 1:N MESSAGES
+USERS N:N CONVERSATIONS
+INSTITUTIONS 1:N CONVERSATIONS
+CAMPAIGNS 1:N CONVERSATIONS
 
 USERS 1:N NOTIFICATIONS
 USERS 1:N REPORTS
 USERS 1:N AUDIT_LOGS
+USERS 1:N ERROR_LOGS
+TERMS 1:N USERS (conceitual, via acceptedTermsVersion)
+
+APP_SETTINGS (entidade independente)
+SUPPORT_FAQS (entidade independente)
+STRIPE_WEBHOOK_EVENTS (entidade independente, relacionada conceitualmente a PAYMENTS)
 ```
 
 ---

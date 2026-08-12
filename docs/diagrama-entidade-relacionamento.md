@@ -25,6 +25,11 @@ npx @mermaid-js/mermaid-cli -i docs/diagrama-entidade-relacionamento.mmd -o docs
 - Os campos `targetId` em `follows`, `reports` e `audit_logs` não possuem `ref` fixo no schema.
 - `posts.authorId` depende de `authorType`, podendo representar usuário ou instituição.
 - `conversations.participantIds` e `messages.readBy.userId` representam listas de usuários.
+- `campaigns` possui coleções de comentários e reações próprias (`campaign_comments`, `campaign_reactions`), distintas de `post_comments`/`post_reactions`, que continuam vinculadas apenas a `posts`.
+- `delivery_proofs.donationId` e `delivery_proofs.campaignId` são ambos opcionais e mutuamente alternativos: a prova pode estar associada a uma doação ou diretamente a uma campanha.
+- `users.roles` é uma lista (não um único papel): cada item guarda `name`, `grantedAt` e `grantedBy` (com `grantedBy.userId` opcionalmente apontando para outro usuário que concedeu o papel — um auto-relacionamento em `users`).
+- `terms.version` e `users.acceptedTermsVersion` se relacionam apenas conceitualmente (por valor), sem `ref` fixo no schema.
+- `app_settings`, `support_faqs` e `stripe_webhook_events` são entidades operacionais/administrativas sem relacionamento direto (`ref`) com as demais collections.
 
 ## Principais relacionamentos
 
@@ -40,15 +45,30 @@ npx @mermaid-js/mermaid-cli -i docs/diagrama-entidade-relacionamento.mmd -o docs
 | `campaigns` | `donations` | `campaignId` |
 | `donations` | `payments` | `donationId` |
 | `donations` | `delivery_proofs` | `donationId` |
+| `campaigns` | `delivery_proofs` | `campaignId` |
 | `donations` | `tax_receipts` | `donationId` |
 | `donations` | `donation_status_history` | `donationId` |
 | `donations` | `tracking_events` | `donationId` |
 | `posts` | `post_comments` | `postId` |
 | `posts` | `post_reactions` | `postId` |
+| `campaigns` | `campaign_comments` | `campaignId` |
+| `users` | `campaign_comments` | `userId` |
+| `campaigns` | `campaign_reactions` | `campaignId` |
+| `users` | `campaign_reactions` | `userId` |
 | `conversations` | `messages` | `conversationId` |
+| `users` | `conversations` | `participantIds` |
+| `institutions` | `conversations` | `institutionId` |
+| `campaigns` | `conversations` | `campaignId` |
 | `users` | `notifications` | `userId` |
 | `users` | `follows` | `followerUserId` |
 | `institutions` | `follows` | `targetId` quando `targetType` for instituição |
 | `campaigns` | `follows` | `targetId` quando `targetType` for campanha |
-| `users` | `reports` | `reporterUserId`, `reviewedByUserId` |
+| `users` | `follows` | `targetId` quando `targetType` for usuário |
+| `users` | `reports` | `reporterUserId`, `reviewedByUserId`, `targetId` quando `targetType` for usuário |
+| `institutions` | `reports` | `targetId` quando `targetType` for instituição |
+| `campaigns` | `reports` | `targetId` quando `targetType` for campanha |
+| `posts` | `reports` | `targetId` quando `targetType` for post |
+| `messages` | `reports` | `targetId` quando `targetType` for mensagem |
 | `users` | `audit_logs` | `actorUserId` |
+| `users` | `error_logs` | `userId` |
+| `users` | `users` | `roles[].grantedBy.userId` (auto-relacionamento) |
