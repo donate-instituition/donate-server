@@ -90,6 +90,17 @@ export class PostReactionsService {
     return this.toReactionResponse(reaction);
   }
 
+  async getMyLikedPostIds(userId?: string) {
+    const ownerId = this.toObjectId(userId);
+    const reactions = await this.postReactionModel
+      .find({ userId: ownerId, type: PostReactionType.LIKE })
+      .select('postId')
+      .lean()
+      .exec();
+
+    return reactions.map((reaction) => reaction.postId.toString());
+  }
+
   async findAll() {
     const reactions = await this.postReactionModel
       .find()

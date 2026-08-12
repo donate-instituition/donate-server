@@ -34,6 +34,11 @@ export class PostReactionsController {
     return this.postReactionsService.removeMineByPost(postId, user?.sub);
   }
 
+  @Get('me')
+  getMyLikedPostIds(@CurrentUser() user: AuthenticatedUser | undefined) {
+    return this.postReactionsService.getMyLikedPostIds(user?.sub);
+  }
+
   @Get()
   findAll() {
     return this.postReactionsService.findAll();

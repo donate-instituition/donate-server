@@ -54,6 +54,7 @@ export class PostCommentsService {
             id: author._id?.toString() ?? author.id,
             fullName: author.fullName,
             email: author.email,
+            profilePhotoUrl: author.profilePhotoUrl,
           }
         : undefined,
       parentCommentId: comment.parentCommentId?.toString(),
@@ -121,7 +122,7 @@ export class PostCommentsService {
     const comments = await this.postCommentModel
       .find({ postId: this.toObjectId(postId) })
       .sort({ createdAt: 1 })
-      .populate('userId', 'fullName email')
+      .populate('userId', 'fullName email profilePhotoUrl')
       .exec();
 
     return comments.map((comment: any) =>
