@@ -281,6 +281,8 @@ export class InstitutionsService {
       acceptsRecurringDonations: Boolean(institution.acceptsRecurringDonations),
       stripeConnect: this.toAppStripeConnect(institution),
       stripeConnectAccountId: institution.stripeConnectAccountId,
+      logoUrl: institution.logoUrl,
+      coverPhotoUrl: institution.coverPhotoUrl,
       location,
     };
   }
