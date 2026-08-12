@@ -733,7 +733,12 @@ export class AuthService implements OnModuleInit {
         audience: env.googleWebClientId,
       });
       payload = ticket.getPayload();
-    } catch {
+    } catch (error) {
+      this.logger.warn(
+        `Google ID token verification failed (audience=${env.googleWebClientId || '<empty>'}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
       throw new UnauthorizedException('Google ID token is invalid');
     }
 
