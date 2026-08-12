@@ -59,6 +59,15 @@ export class CampaignsController {
     return this.campaignsService.listComments(id);
   }
 
+  @Public()
+  @Get(':id/donors')
+  getRecentDonors(@Param('id') id: string, @Query('limit') limit?: string) {
+    return this.campaignsService.getRecentDonors(
+      id,
+      limit ? Number(limit) : undefined,
+    );
+  }
+
   @Post(':id/like')
   like(
     @Param('id') id: string,
@@ -92,6 +101,11 @@ export class CampaignsController {
     @Query() query: PaginationQuery,
   ) {
     return this.campaignsService.findMine(user?.sub, query);
+  }
+
+  @Get('me/likes')
+  getMyLikedCampaignIds(@CurrentUser() user: AuthenticatedUser | undefined) {
+    return this.campaignsService.getMyLikedCampaignIds(user?.sub);
   }
 
   @Public()

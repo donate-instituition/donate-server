@@ -12,6 +12,7 @@ import {
   CampaignReaction,
   CampaignReactionSchema,
 } from './schemas/campaign-reaction.schema';
+import { Donation, DonationSchema } from '../donations/schemas/donation.schema';
 import {
   InstitutionStaffMembership,
   InstitutionStaffMembershipSchema,
@@ -30,6 +31,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
       { name: CampaignReaction.name, schema: CampaignReactionSchema },
       { name: Institution.name, schema: InstitutionSchema },
       { name: User.name, schema: UserSchema },
+      { name: Donation.name, schema: DonationSchema },
       {
         name: InstitutionStaffMembership.name,
         schema: InstitutionStaffMembershipSchema,

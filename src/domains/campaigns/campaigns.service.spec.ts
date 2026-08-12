@@ -68,6 +68,7 @@ describe('CampaignsService', () => {
 
   const userModel = {};
   const institutionStaffMembershipModel = {};
+  const donationModel = {};
 
   function createService() {
     return new CampaignsService(
@@ -77,6 +78,7 @@ describe('CampaignsService', () => {
       institutionModel as any,
       userModel as any,
       institutionStaffMembershipModel as any,
+      donationModel as any,
       createRedisServiceMock() as any,
       createCountersServiceMock() as any,
     );

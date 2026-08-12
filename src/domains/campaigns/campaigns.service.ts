@@ -15,6 +15,11 @@ import {
   shouldPaginate,
 } from '../../common/pagination';
 import { env } from '../../config/env';
+import { DonationStatus } from '../donations/models';
+import {
+  Donation,
+  DonationDocument,
+} from '../donations/schemas/donation.schema';
 import {
   InstitutionStaffMembershipRole,
   InstitutionStaffMembershipStatus,
@@ -70,6 +75,8 @@ export class CampaignsService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(InstitutionStaffMembership.name)
     private readonly institutionStaffMembershipModel: Model<InstitutionStaffMembershipDocument>,
+    @InjectModel(Donation.name)
+    private readonly donationModel: Model<DonationDocument>,
     private readonly redisService: RedisService,
     private readonly countersService: CountersService,
   ) {}
@@ -169,10 +176,20 @@ export class CampaignsService {
     return category ? (categoryMap[category] ?? 'Outros') : 'Outros';
   }
 
+  /**
+   * Legacy fallback for campaigns created before `category` was a field
+   * institutions picked directly — derives a rough category from the
+   * first accepted item type instead. Only used when `campaign.category`
+   * is unset.
+   */
   private mapCategory(campaign: CampaignDocument) {
     return this.toAppCategory(
       campaign?.acceptedItems?.[0]?.category?.toString(),
     );
+  }
+
+  private resolveCategory(campaign: CampaignDocument) {
+    return campaign.category ?? this.mapCategory(campaign);
   }
 
   private toAppLocation(location?: { coordinates?: unknown }) {
@@ -230,7 +247,7 @@ export class CampaignsService {
         campaign.institutionName ??
         'Instituição',
       institutionId: campaign.institutionId?.toString() ?? '',
-      category: this.mapCategory(campaign),
+      category: this.resolveCategory(campaign),
       bannerUrl: campaign.bannerUrl,
       status: campaign?.status,
       goalFormatted: this.formatCurrency(goalCents),
@@ -256,6 +273,7 @@ export class CampaignsService {
         institution?.acceptsRecurringDonations,
       ),
       location,
+      createdAt: campaign.createdAt?.toISOString?.() ?? campaign.createdAt,
     };
   }
 
@@ -638,6 +656,61 @@ export class CampaignsService {
     };
   }
 
+  /**
+   * "Apoiadores" are people who actually donated to the campaign, not
+   * people who merely follow it — statuses before PAID (or that never
+   * reached it, e.g. FAILED/CANCELED) don't count as support.
+   */
+  private readonly completedDonationStatuses = [
+    DonationStatus.PAID,
+    DonationStatus.SCHEDULED_PICKUP,
+    DonationStatus.IN_TRANSIT,
+    DonationStatus.DELIVERED,
+  ];
+
+  async getRecentDonors(id: string, limit = 3) {
+    const campaignId = this.toObjectId(id);
+    const boundedLimit = Math.min(Math.max(limit, 1), 20);
+    const match = {
+      campaignId,
+      status: { $in: this.completedDonationStatuses },
+    };
+
+    const [donors, distinctDonorIds] = await Promise.all([
+      this.donationModel.aggregate([
+        { $match: match },
+        { $sort: { createdAt: -1 } },
+        {
+          $group: {
+            _id: '$donorUserId',
+            lastDonatedAt: { $first: '$createdAt' },
+          },
+        },
+        { $sort: { lastDonatedAt: -1 } },
+        { $limit: boundedLimit },
+        {
+          $lookup: {
+            from: 'users',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'donor',
+          },
+        },
+        { $unwind: '$donor' },
+      ]),
+      this.donationModel.distinct('donorUserId', match),
+    ]);
+
+    return {
+      donors: donors.map((donor) => ({
+        id: donor._id.toString(),
+        name: donor.donor.fullName,
+        profilePhotoUrl: donor.donor.profilePhotoUrl,
+      })),
+      totalCount: distinctDonorIds.length,
+    };
+  }
+
   async update(id: string, updateCampaignDto: UpdateCampaignDto) {
     const campaign = await this.campaignModel
       .findByIdAndUpdate(id, updateCampaignDto, { returnDocument: 'after' })
@@ -667,6 +740,7 @@ export class CampaignsService {
             id: author._id?.toString() ?? author.id,
             fullName: author.fullName,
             email: author.email,
+            profilePhotoUrl: author.profilePhotoUrl,
           }
         : undefined,
       content: comment.content,
@@ -688,7 +762,7 @@ export class CampaignsService {
     const comments = await this.campaignCommentModel
       .find({ campaignId })
       .sort({ createdAt: 1 })
-      .populate('userId', 'fullName email')
+      .populate('userId', 'fullName email profilePhotoUrl')
       .exec();
 
     return comments.map((comment: any) =>
@@ -806,6 +880,17 @@ export class CampaignsService {
     }
 
     return { campaignId: id, liked: false };
+  }
+
+  async getMyLikedCampaignIds(userId?: string) {
+    const ownerId = this.toObjectId(userId);
+    const reactions = await this.campaignReactionModel
+      .find({ userId: ownerId })
+      .select('campaignId')
+      .lean()
+      .exec();
+
+    return reactions.map((reaction) => reaction.campaignId.toString());
   }
 
   async share(id: string) {
