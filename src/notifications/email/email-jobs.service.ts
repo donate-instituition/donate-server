@@ -161,7 +161,7 @@ export class EmailJobsService {
     await this.rabbitMqPublisher.publish(
       'email.send',
       createQueueMessage({
-        idempotencyKey: `email:account-created:${input.userId}`,
+        idempotencyKey: `email:account-created:${input.userId}:${Date.now()}`,
         payload: {
           html,
           metadata: {
