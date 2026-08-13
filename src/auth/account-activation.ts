@@ -24,7 +24,7 @@ export function createAccountActivationUrl(
   userId: string,
   version: string,
   baseUrl = env.emailAccountActivationUrl ||
-    'http://localhost:3000/auth/activate-account',
+    'http://localhost:3000/activate-account',
 ) {
   const separator = baseUrl.includes('?') ? '&' : '?';
 

@@ -135,7 +135,7 @@ export const env = {
   emailBrandLogoUrl: process.env.EMAIL_BRAND_LOGO_URL?.trim() || '',
   emailAccountActivationUrl:
     process.env.EMAIL_ACCOUNT_ACTIVATION_URL?.trim() ||
-    'http://localhost:3000/auth/activate-account',
+    'http://localhost:3000/activate-account',
   emailPublicAppUrl: process.env.EMAIL_PUBLIC_APP_URL?.trim() || '',
   emailSupportEmail:
     process.env.EMAIL_SUPPORT_EMAIL?.trim() || 'contato@elodoar.local',

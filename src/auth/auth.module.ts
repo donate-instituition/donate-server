@@ -13,6 +13,7 @@ import {
 import { AuditLogsModule } from '../domains/audit-logs/audit-logs.module';
 import { UsersModule } from '../domains/users/users.module';
 import { EmailJobsModule } from '../notifications/email/email-jobs.module';
+import { AccountActivationLandingController } from './account-activation-landing.controller';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -36,7 +37,7 @@ import {
       },
     ]),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AccountActivationLandingController],
   providers: [
     AuthService,
     {

@@ -20,7 +20,7 @@ describe('account activation tokens', () => {
   it('builds activation URLs with token query parameter', () => {
     const url = createAccountActivationUrl('user-1', 'version-1');
 
-    expect(url).toContain('/auth/activate-account?token=');
+    expect(url).toContain('/activate-account?token=');
     expect(url.split('token=')[1]).toBeTruthy();
   });
 });
